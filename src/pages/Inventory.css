@@ -1,0 +1,14 @@
+/* Import this once in your app's global CSS, after Tailwind's base/components/utilities. */
+@layer components {
+  .input {
+    @apply w-full rounded-lg border-2 border-slate-300 bg-white px-3.5 py-2.5 text-[15px] font-medium
+           text-slate-900 shadow-sm transition-colors
+           placeholder:font-normal placeholder:text-slate-400
+           hover:border-slate-400
+           focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-100;
+  }
+
+  .field-label {
+    @apply mb-1.5 block text-sm font-semibold text-slate-800;
+  }
+}

@@ -89,7 +89,7 @@ const SignIn = () => {
 
       toast.success(`Welcome back, ${user?.name || "User"}!`);
 
-      navigate("/product", { replace: true });
+      navigate("/products", { replace: true });
     } catch (error) {
       const message =
         error?.response?.data?.message ||
