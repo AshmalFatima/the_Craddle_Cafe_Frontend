@@ -3,44 +3,52 @@ import {
   LayoutDashboard,
   Tag,
   Package,
-  Money,
+  Wallet,
   ShoppingCart,
-  Users,
-  Settings,
   LogOut,
   Menu,
   X,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  // { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
   { key: "categories", label: "Categories", icon: Tag, href: "/categories" },
   { key: "products", label: "Products", icon: Package, href: "/products" },
-  { key: "expenses", label: "Expenses", icon: ShoppingCart, href: "/expenses" },
-  { key: "stock", label: "Stock", icon: Package, href: "/stock" },
+  { key: "expenses", label: "Expenses", icon: Wallet, href: "/expenses" },
+  { key: "stock", label: "Stock", icon: ShoppingCart, href: "/stock" },
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Sidebar
+/*  SidebarLayout
  *
- *  Renders once per layout, as a sibling of your page content — never
- *  wrap other components in it. Typical usage:
+ *  A drop-in page shell. Import it once and wrap each page's content —
+ *  you don't need to think about the sidebar again after that.
  *
- *    <div className="flex min-h-screen">
- *      <Sidebar activeKey="products" onNavigate={(item) => navigate(item.href)} />
- *      <div className="flex-1 min-w-0">
- *        <YourPage />
- *      </div>
- *    </div>
+ *    import SidebarLayout from "./SidebarLayout";
+ *
+ *    export default function ProductsPage() {
+ *      return (
+ *        <SidebarLayout
+ *          activeKey="products"
+ *          user={{ name: "Amina Raza", contact: "amina@shop.com" }}
+ *          onNavigate={(item) => router.push(item.href)}
+ *          onLogout={() => signOut()}
+ *        >
+ *          <YourPageContent />
+ *        </SidebarLayout>
+ *      );
+ *    }
  *
  *  Props:
- *    activeKey   - key of the current nav item (controlled). Falls back to
- *                  matching window.location.pathname, then "dashboard".
- *    onNavigate  - (item) => void, fired when a nav item is clicked.
- *    user        - { name, email } shown in the footer.
+ *    activeKey   - key of the current nav item ("dashboard", "products", ...).
+ *                  Falls back to matching window.location.pathname, then "dashboard".
+ *    onNavigate  - (item) => void, fired when a nav item is clicked. Do your
+ *                  routing here (react-router's navigate, Next's router.push, etc).
+ *    user        - { name, contact } shown in the footer card.
  *    onLogout    - () => void, fired when "Log out" is clicked.
+ *    children    - the page content, rendered to the right of the sidebar.
  * ------------------------------------------------------------------ */
-export default function Sidebar({ activeKey, onNavigate,  onLogout }) {
+export default function SidebarLayout({ activeKey, onNavigate, onLogout, children }) {
   const [internalActive, setInternalActive] = useState(() => {
     if (activeKey) return activeKey;
     if (typeof window !== "undefined") {
@@ -50,7 +58,6 @@ export default function Sidebar({ activeKey, onNavigate,  onLogout }) {
     return "dashboard";
   });
   const [mobileOpen, setMobileOpen] = useState(false);
-  const user = localStorage.getItem("user") ? JSON.parse(localStorage.getItem("user")) : null;
 
   const current = activeKey ?? internalActive;
 
@@ -73,6 +80,7 @@ export default function Sidebar({ activeKey, onNavigate,  onLogout }) {
       };
     }
   }, [mobileOpen]);
+  const user = localStorage.getItem("user") ? JSON.parse(localStorage.getItem("user")) : null;
 
   const handleSelect = (item) => {
     if (!activeKey) setInternalActive(item.key);
@@ -88,9 +96,9 @@ export default function Sidebar({ activeKey, onNavigate,  onLogout }) {
     .toUpperCase();
 
   return (
-    <>
+    <div className="min-h-screen bg-white">
       {/* Mobile top bar with menu toggle */}
-      <div className="sticky top-0 z-40 flex items-center gap-3 border-b border-[#E4E0D6] bg-[#F7F5F0]/95 px-4 py-3 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-3 border-b border-[#E4E0D6] bg-[#F7F5F0]/95 px-4 py-3 backdrop-blur md:hidden">
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Open menu"
@@ -117,7 +125,7 @@ export default function Sidebar({ activeKey, onNavigate,  onLogout }) {
       {/* Sidebar panel — fixed drawer on mobile, sticky column on desktop */}
       <aside
         aria-label="Main navigation"
-        className={`fixed top-0 left-0 z-50 flex h-full w-64 shrink-0 flex-col border-r border-[#E4E0D6] bg-[#F7F5F0] transition-transform duration-200 ease-out md:sticky md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-[#E4E0D6] bg-[#F7F5F0] transition-transform duration-200 ease-out md:translate-x-0 ${
           mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
         style={{ fontFamily: "Inter, sans-serif" }}
@@ -186,9 +194,7 @@ export default function Sidebar({ activeKey, onNavigate,  onLogout }) {
             <p className="truncate text-[13px] font-medium text-[#1C2B33]">
               {user?.name || "Admin user"}
             </p>
-            <p className="truncate text-[11px] text-[#5C6B73]">
-              {user?.contact}
-            </p>
+            <p className="truncate text-[11px] text-[#5C6B73]">{user?.contact || ""}</p>
           </div>
           <button
             onClick={onLogout}
@@ -199,6 +205,45 @@ export default function Sidebar({ activeKey, onNavigate,  onLogout }) {
           </button>
         </div>
       </aside>
-    </>
+
+      {/* Page content — this is where each page's children render */}
+      <div className="min-w-0 pt-14 md:pt-0 md:ml-64">
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Demo — shows the layout in action. Replace with your real pages.  */
+/* ------------------------------------------------------------------ */
+function DemoPage({ title }) {
+  return (
+    <div style={{ fontFamily: "Inter, sans-serif" }}>
+      <h1
+        className="text-xl font-semibold text-[#1C2B33]"
+        style={{ fontFamily: "Space Grotesk, sans-serif" }}
+      >
+        {title}
+      </h1>
+      <p className="mt-2 text-sm text-[#5C6B73]">
+        This is your page content. Everything inside &lt;SidebarLayout&gt; renders here,
+        to the right of the sidebar, with the mobile drawer handled for you.
+      </p>
+    </div>
+  );
+}
+
+export function SidebarLayoutDemo() {
+  const [active, setActive] = useState("dashboard");
+  return (
+    <SidebarLayout
+      activeKey={active}
+      onNavigate={(item) => setActive(item.key)}
+      user={{ name: "Amina Raza", contact: "amina@shop.com" }}
+      onLogout={() => alert("Logged out")}
+    >
+      <DemoPage title={NAV_ITEMS.find((i) => i.key === active)?.label} />
+    </SidebarLayout>
   );
 }

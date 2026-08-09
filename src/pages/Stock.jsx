@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Search,
@@ -10,7 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-import Sidebar from "../components/Sidebar";
+import SidebarLayout from "../components/SidebarLayout";
 
 const API_BASE = "http://localhost:5000/api/stock";
 
@@ -776,16 +775,16 @@ export default function Stock() {
   ------------------------------------------------------- */
 
   return (
-    <div className="flex min-h-screen bg-[#F7F5F0] text-[#1C2B33]">
-      {/* ---------------------------------------------------
-          SIDEBAR
-      --------------------------------------------------- */}
-
-      <Sidebar
+    <>
+      {/*
+        SidebarLayout owns the sidebar + responsive shell now.
+        Everything below is just this page's content.
+      */}
+      <SidebarLayout
         activeKey="stock"
         user={{
           name: "Admin user",
-          email: "admin@example.com",
+          contact: "admin@example.com",
         }}
         onNavigate={(item) => {
           window.location.href = item.href;
@@ -794,491 +793,480 @@ export default function Stock() {
           localStorage.removeItem("token");
           window.location.href = "/signin";
         }}
-      />
+      >
+        <div className="mx-auto max-w-7xl">
 
-      {/* ---------------------------------------------------
-          PAGE CONTENT
-      --------------------------------------------------- */}
+          {/* Header */}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1
+                className="text-2xl font-semibold tracking-tight text-[#1C2B33]"
+                style={{
+                  fontFamily:
+                    "Space Grotesk, sans-serif",
+                }}
+              >
+                Stock Management
+              </h1>
 
-      <div className="min-w-0 flex-1">
-        <main className="min-h-screen">
-          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
+              <p className="mt-1 text-sm text-[#5C6B73]">
+                Manage stock in, stock out and
+                inventory history.
+              </p>
+            </div>
 
-            {/* Header */}
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={openStockIn}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
+              >
+                <ArrowDownToLine className="h-4 w-4" />
+                Stock In
+              </button>
+
+              <button
+                type="button"
+                onClick={openStockOut}
+                className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-rose-700"
+              >
+                <ArrowUpFromLine className="h-4 w-4" />
+                Stock Out
+              </button>
+            </div>
+          </div>
+
+          {/* Summary Cards */}
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <SummaryCard
+              title="Stock In"
+              quantity={summary.inUnits}
+              amount={summary.inAmount}
+              icon={ArrowDownToLine}
+              color="emerald"
+              active={activeCard === "in"}
+              onClick={() => {
+                setActiveCard("in");
+
+                setFilters((f) => ({
+                  ...f,
+                  type: "in",
+                }));
+              }}
+            />
+
+            <SummaryCard
+              title="Stock Out"
+              quantity={summary.outUnits}
+              amount={summary.outAmount}
+              icon={ArrowUpFromLine}
+              color="rose"
+              active={activeCard === "out"}
+              onClick={() => {
+                setActiveCard("out");
+
+                setFilters((f) => ({
+                  ...f,
+                  type: "out",
+                }));
+              }}
+            />
+
+            <SummaryCard
+              title="Total Movements"
+              quantity={movements.length}
+              amount={
+                summary.inAmount +
+                summary.outAmount
+              }
+              icon={Package}
+              color="teal"
+              active={activeCard === "all"}
+              onClick={() => {
+                setActiveCard("all");
+
+                setFilters((f) => ({
+                  ...f,
+                  type: "all",
+                }));
+              }}
+            />
+          </div>
+
+          {/* Filters */}
+          <div className="mb-6 rounded-xl border border-[#E4E0D6] bg-white p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+
+              {/* Search */}
+              <div className="lg:col-span-2">
+                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                  Search
+                </label>
+
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A969C]" />
+
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        search: e.target.value,
+                      }))
+                    }
+                    placeholder="Search product or note..."
+                    className="w-full rounded-lg border border-[#E4E0D6] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
+                  />
+                </div>
+              </div>
+
+              {/* Type */}
               <div>
-                <h1
-                  className="text-2xl font-semibold tracking-tight text-[#1C2B33]"
-                  style={{
-                    fontFamily:
-                      "Space Grotesk, sans-serif",
+                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                  Type
+                </label>
+
+                <select
+                  value={filters.type}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    setFilters((f) => ({
+                      ...f,
+                      type: value,
+                    }));
+
+                    setActiveCard(
+                      value === "in"
+                        ? "in"
+                        : value === "out"
+                        ? "out"
+                        : "all"
+                    );
                   }}
+                  className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
                 >
-                  Stock Management
-                </h1>
-
-                <p className="mt-1 text-sm text-[#5C6B73]">
-                  Manage stock in, stock out and
-                  inventory history.
-                </p>
+                  <option value="all">All</option>
+                  <option value="in">Stock In</option>
+                  <option value="out">Stock Out</option>
+                </select>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={openStockIn}
-                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
-                >
-                  <ArrowDownToLine className="h-4 w-4" />
-                  Stock In
-                </button>
+              {/* From */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                  From
+                </label>
 
-                <button
-                  type="button"
-                  onClick={openStockOut}
-                  className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-rose-700"
-                >
-                  <ArrowUpFromLine className="h-4 w-4" />
-                  Stock Out
-                </button>
-              </div>
-            </div>
-
-            {/* Summary Cards */}
-            <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <SummaryCard
-                title="Stock In"
-                quantity={summary.inUnits}
-                amount={summary.inAmount}
-                icon={ArrowDownToLine}
-                color="emerald"
-                active={activeCard === "in"}
-                onClick={() => {
-                  setActiveCard("in");
-
-                  setFilters((f) => ({
-                    ...f,
-                    type: "in",
-                  }));
-                }}
-              />
-
-              <SummaryCard
-                title="Stock Out"
-                quantity={summary.outUnits}
-                amount={summary.outAmount}
-                icon={ArrowUpFromLine}
-                color="rose"
-                active={activeCard === "out"}
-                onClick={() => {
-                  setActiveCard("out");
-
-                  setFilters((f) => ({
-                    ...f,
-                    type: "out",
-                  }));
-                }}
-              />
-
-              <SummaryCard
-                title="Total Movements"
-                quantity={movements.length}
-                amount={
-                  summary.inAmount +
-                  summary.outAmount
-                }
-                icon={Package}
-                color="teal"
-                active={activeCard === "all"}
-                onClick={() => {
-                  setActiveCard("all");
-
-                  setFilters((f) => ({
-                    ...f,
-                    type: "all",
-                  }));
-                }}
-              />
-            </div>
-
-            {/* Filters */}
-            <div className="mb-6 rounded-xl border border-[#E4E0D6] bg-white p-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-
-                {/* Search */}
-                <div className="lg:col-span-2">
-                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                    Search
-                  </label>
-
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A969C]" />
-
-                    <input
-                      type="text"
-                      value={filters.search}
-                      onChange={(e) =>
-                        setFilters((f) => ({
-                          ...f,
-                          search: e.target.value,
-                        }))
-                      }
-                      placeholder="Search product or note..."
-                      className="w-full rounded-lg border border-[#E4E0D6] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-                    />
-                  </div>
-                </div>
-
-                {/* Type */}
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                    Type
-                  </label>
-
-                  <select
-                    value={filters.type}
-                    onChange={(e) => {
-                      const value = e.target.value;
-
-                      setFilters((f) => ({
-                        ...f,
-                        type: value,
-                      }));
-
-                      setActiveCard(
-                        value === "in"
-                          ? "in"
-                          : value === "out"
-                          ? "out"
-                          : "all"
-                      );
-                    }}
-                    className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-                  >
-                    <option value="all">All</option>
-                    <option value="in">Stock In</option>
-                    <option value="out">Stock Out</option>
-                  </select>
-                </div>
-
-                {/* From */}
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                    From
-                  </label>
-
-                  <input
-                    type="date"
-                    value={filters.startDate}
-                    onChange={(e) =>
-                      setFilters((f) => ({
-                        ...f,
-                        startDate: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-                  />
-                </div>
-
-                {/* To */}
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                    To
-                  </label>
-
-                  <input
-                    type="date"
-                    value={filters.endDate}
-                    min={filters.startDate || undefined}
-                    onChange={(e) =>
-                      setFilters((f) => ({
-                        ...f,
-                        endDate: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-                  />
-                </div>
+                <input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(e) =>
+                    setFilters((f) => ({
+                      ...f,
+                      startDate: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
+                />
               </div>
 
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4E0D6] px-3.5 py-2 text-sm font-medium text-[#5C6B73] transition hover:bg-[#F7F5F0]"
-                >
-                  <X className="h-4 w-4" />
-                  Clear Filters
-                </button>
+              {/* To */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                  To
+                </label>
+
+                <input
+                  type="date"
+                  value={filters.endDate}
+                  min={filters.startDate || undefined}
+                  onChange={(e) =>
+                    setFilters((f) => ({
+                      ...f,
+                      endDate: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
+                />
               </div>
             </div>
 
-            {/* Error */}
-            {error && (
-              <div className="mb-4 flex items-center justify-between rounded-lg border border-[#B23A34]/20 bg-[#B23A34]/5 px-4 py-3 text-sm text-[#B23A34]">
-                <span>{error}</span>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4E0D6] px-3.5 py-2 text-sm font-medium text-[#5C6B73] transition hover:bg-[#F7F5F0]"
+              >
+                <X className="h-4 w-4" />
+                Clear Filters
+              </button>
+            </div>
+          </div>
 
-                <button
-                  type="button"
-                  onClick={loadStock}
-                  className="inline-flex items-center gap-1 font-medium"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  Retry
-                </button>
-              </div>
-            )}
+          {/* Error */}
+          {error && (
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-[#B23A34]/20 bg-[#B23A34]/5 px-4 py-3 text-sm text-[#B23A34]">
+              <span>{error}</span>
 
-            {/* Table */}
-            <div className="overflow-hidden rounded-xl border border-[#E4E0D6] bg-white">
-              <div className="overflow-x-auto">
-                <table className="min-w-[1050px] w-full text-sm">
+              <button
+                type="button"
+                onClick={loadStock}
+                className="inline-flex items-center gap-1 font-medium"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry
+              </button>
+            </div>
+          )}
 
-                  <thead>
-                    <tr className="border-b border-[#E4E0D6] bg-[#F7F5F0] text-left text-xs font-medium uppercase tracking-wide text-[#5C6B73]">
-                      <th className="px-4 py-3">
-                        Product
-                      </th>
+          {/* Table */}
+          <div className="overflow-hidden rounded-xl border border-[#E4E0D6] bg-white">
+            <div className="overflow-x-auto">
+              <table className="min-w-[1050px] w-full text-sm">
 
-                      <th className="px-4 py-3">
-                        Type
-                      </th>
+                <thead>
+                  <tr className="border-b border-[#E4E0D6] bg-[#F7F5F0] text-left text-xs font-medium uppercase tracking-wide text-[#5C6B73]">
+                    <th className="px-4 py-3">
+                      Product
+                    </th>
 
-                      <th className="px-4 py-3">
-                        Quantity
-                      </th>
+                    <th className="px-4 py-3">
+                      Type
+                    </th>
 
-                      <th className="px-4 py-3">
-                        Unit Price
-                      </th>
+                    <th className="px-4 py-3">
+                      Quantity
+                    </th>
 
-                      <th className="px-4 py-3">
-                        Amount
-                      </th>
+                    <th className="px-4 py-3">
+                      Unit Price
+                    </th>
 
-                      <th className="px-4 py-3">
-                        Profit
-                      </th>
+                    <th className="px-4 py-3">
+                      Amount
+                    </th>
 
-                      <th className="px-4 py-3">
-                        Note
-                      </th>
+                    <th className="px-4 py-3">
+                      Profit
+                    </th>
 
-                      <th className="px-4 py-3">
-                        Date
-                      </th>
+                    <th className="px-4 py-3">
+                      Note
+                    </th>
 
-                      <th className="px-4 py-3 text-right">
-                        Actions
-                      </th>
+                    <th className="px-4 py-3">
+                      Date
+                    </th>
+
+                    <th className="px-4 py-3 text-right">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-[#E4E0D6]">
+
+                  {/* Loading */}
+                  {loading && (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="px-4 py-10 text-center text-[#8A969C]"
+                      >
+                        Loading stock history...
+                      </td>
                     </tr>
-                  </thead>
+                  )}
 
-                  <tbody className="divide-y divide-[#E4E0D6]">
-
-                    {/* Loading */}
-                    {loading && (
+                  {/* Empty */}
+                  {!loading &&
+                    filteredMovements.length ===
+                      0 && (
                       <tr>
                         <td
                           colSpan={9}
                           className="px-4 py-10 text-center text-[#8A969C]"
                         >
-                          Loading stock history...
+                          No stock movements found.
                         </td>
                       </tr>
                     )}
 
-                    {/* Empty */}
-                    {!loading &&
-                      filteredMovements.length ===
-                        0 && (
-                        <tr>
-                          <td
-                            colSpan={9}
-                            className="px-4 py-10 text-center text-[#8A969C]"
+                  {/* Rows */}
+                  {!loading &&
+                    filteredMovements.map(
+                      (movement) => {
+                        const isIn =
+                          movement.type === "in";
+
+                        return (
+                          <tr
+                            key={movement._id}
+                            className={`border-l-4 ${
+                              isIn
+                                ? "border-l-emerald-500"
+                                : "border-l-rose-500"
+                            } transition hover:bg-[#F7F5F0]/60`}
                           >
-                            No stock movements found.
-                          </td>
-                        </tr>
-                      )}
-
-                    {/* Rows */}
-                    {!loading &&
-                      filteredMovements.map(
-                        (movement) => {
-                          const isIn =
-                            movement.type === "in";
-
-                          return (
-                            <tr
-                              key={movement._id}
-                              className={`border-l-4 ${
-                                isIn
-                                  ? "border-l-emerald-500"
-                                  : "border-l-rose-500"
-                              } transition hover:bg-[#F7F5F0]/60`}
-                            >
-                              {/* Product */}
-                              <td className="px-4 py-3">
-                                <div className="font-medium text-[#1C2B33]">
-                                  {movement.product
-                                    ?.name || "—"}
-                                </div>
-
+                            {/* Product */}
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-[#1C2B33]">
                                 {movement.product
-                                  ?.variantName && (
-                                  <div className="mt-0.5 text-xs text-[#8A969C]">
-                                    {
-                                      movement
-                                        .product
-                                        .variantName
-                                    }
-                                  </div>
-                                )}
-                              </td>
+                                  ?.name || "—"}
+                              </div>
 
-                              {/* Type */}
-                              <td className="px-4 py-3">
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                                    isIn
-                                      ? "bg-emerald-50 text-emerald-700"
-                                      : "bg-rose-50 text-rose-700"
-                                  }`}
-                                >
-                                  {isIn
-                                    ? "Stock In"
-                                    : "Stock Out"}
-                                </span>
-                              </td>
-
-                              {/* Quantity */}
-                              <td className="px-4 py-3">
-                                <div className="font-medium text-[#1C2B33]">
-                                  {isIn
-                                    ? `${Math.round(
-                                        Number(
-                                          movement.petStock ||
-                                            0
-                                        )
-                                      )} pets`
-                                    : `${Math.round(
-                                        Number(
-                                          movement.unitStock ||
-                                            0
-                                        )
-                                      )} units`}
-                                </div>
-
+                              {movement.product
+                                ?.variantName && (
                                 <div className="mt-0.5 text-xs text-[#8A969C]">
-                                  {isIn
-                                    ? `${Math.round(
-                                        Number(
-                                          movement.unitStock ||
-                                            0
-                                        )
-                                      )} units`
-                                    : `${Number(
-                                        movement.petStock ||
-                                          0
-                                      ).toFixed(4)} pets`}
+                                  {
+                                    movement
+                                      .product
+                                      .variantName
+                                  }
                                 </div>
-                              </td>
+                              )}
+                            </td>
 
-                              {/* Unit Price */}
-                              <td className="px-4 py-3 text-[#5C6B73]">
-                                {formatCurrency(
-                                  movement.unitPrice
-                                )}
-                              </td>
-
-                              {/* Amount */}
-                              <td
-                                className={`px-4 py-3 font-medium ${
+                            {/* Type */}
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
                                   isIn
-                                    ? "text-emerald-700"
-                                    : "text-rose-700"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-rose-50 text-rose-700"
                                 }`}
                               >
-                                {formatCurrency(
-                                  isIn
-                                    ? movement.stockCostPrice
-                                    : movement.stockSellingPrice
-                                )}
-                              </td>
+                                {isIn
+                                  ? "Stock In"
+                                  : "Stock Out"}
+                              </span>
+                            </td>
 
-                              {/* Profit */}
-                              <td className="px-4 py-3 text-[#5C6B73]">
-                                {formatCurrency(
-                                  movement.profit
-                                )}
-                              </td>
-
-                              {/* Note */}
-                              <td className="max-w-xs truncate px-4 py-3 text-[#5C6B73]">
-                                {movement.note || "—"}
-                              </td>
-
-                              {/* Date */}
-                              <td className="whitespace-nowrap px-4 py-3 text-[#5C6B73]">
-                                {formatDate(
-                                  movement.createdAt
-                                )}
-                              </td>
-
-                              {/* Actions */}
-                              <td className="px-4 py-3 text-right">
-                                <div className="flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleDelete(
-                                        movement
+                            {/* Quantity */}
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-[#1C2B33]">
+                                {isIn
+                                  ? `${Math.round(
+                                      Number(
+                                        movement.petStock ||
+                                          0
                                       )
-                                    }
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8A969C] transition hover:bg-rose-50 hover:text-rose-600"
-                                    aria-label="Delete stock movement"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        }
-                      )}
-                  </tbody>
-                </table>
-              </div>
+                                    )} pets`
+                                  : `${Math.round(
+                                      Number(
+                                        movement.unitStock ||
+                                          0
+                                      )
+                                    )} units`}
+                              </div>
 
-              {/* Footer */}
-              {!loading && (
-                <div className="border-t border-[#E4E0D6] px-4 py-3 text-xs text-[#8A969C]">
-                  Showing{" "}
-                  {filteredMovements.length} of{" "}
-                  {movements.length} movements
-                </div>
-              )}
+                              <div className="mt-0.5 text-xs text-[#8A969C]">
+                                {isIn
+                                  ? `${Math.round(
+                                      Number(
+                                        movement.unitStock ||
+                                          0
+                                      )
+                                    )} units`
+                                  : `${Number(
+                                      movement.petStock ||
+                                        0
+                                    ).toFixed(4)} pets`}
+                              </div>
+                            </td>
+
+                            {/* Unit Price */}
+                            <td className="px-4 py-3 text-[#5C6B73]">
+                              {formatCurrency(
+                                movement.unitPrice
+                              )}
+                            </td>
+
+                            {/* Amount */}
+                            <td
+                              className={`px-4 py-3 font-medium ${
+                                isIn
+                                  ? "text-emerald-700"
+                                  : "text-rose-700"
+                              }`}
+                            >
+                              {formatCurrency(
+                                isIn
+                                  ? movement.stockCostPrice
+                                  : movement.stockSellingPrice
+                              )}
+                            </td>
+
+                            {/* Profit */}
+                            <td className="px-4 py-3 text-[#5C6B73]">
+                              {formatCurrency(
+                                movement.profit
+                              )}
+                            </td>
+
+                            {/* Note */}
+                            <td className="max-w-xs truncate px-4 py-3 text-[#5C6B73]">
+                              {movement.note || "—"}
+                            </td>
+
+                            {/* Date */}
+                            <td className="whitespace-nowrap px-4 py-3 text-[#5C6B73]">
+                              {formatDate(
+                                movement.createdAt
+                              )}
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDelete(
+                                      movement
+                                    )
+                                  }
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8A969C] transition hover:bg-rose-50 hover:text-rose-600"
+                                  aria-label="Delete stock movement"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+                    )}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </main>
-      </div>
 
-      {/* Stock Modal */}
-      <StockModal
-        open={modalOpen}
-        mode={modalMode}
-        products={products}
-        form={form}
-        setForm={setForm}
-        submitting={submitting}
-        error={formError}
-        onClose={closeModal}
-        onSubmit={handleSubmit}
-      />
-    </div>
+            {/* Footer */}
+            {!loading && (
+              <div className="border-t border-[#E4E0D6] px-4 py-3 text-xs text-[#8A969C]">
+                Showing{" "}
+                {filteredMovements.length} of{" "}
+                {movements.length} movements
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Stock Modal */}
+        <StockModal
+          open={modalOpen}
+          mode={modalMode}
+          products={products}
+          form={form}
+          setForm={setForm}
+          submitting={submitting}
+          error={formError}
+          onClose={closeModal}
+          onSubmit={handleSubmit}
+        />
+      </SidebarLayout>
+    </>
   );
 }
-
-
-
