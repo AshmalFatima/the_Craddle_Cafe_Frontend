@@ -22,7 +22,7 @@ import SidebarLayout from "../components/SidebarLayout";
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
-const API_BASE = "http://localhost:5000/api/categories";
+const API_BASE = "https://the-craddle-cafe-backend.vercel.app/api/categories";
 
 function getAuthHeaders() {
   const token =

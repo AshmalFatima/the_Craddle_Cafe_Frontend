@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import SidebarLayout from "../components/SidebarLayout";
 
 // Point this at wherever your expense routes are mounted
-const API_BASE = "http://localhost:5000/api/expenses";
+const API_BASE = "https://the-craddle-cafe-backend.vercel.app/api/expenses";
 
 const TYPES = {
   ALL: "all",

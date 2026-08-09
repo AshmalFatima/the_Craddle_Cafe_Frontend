@@ -12,7 +12,7 @@ import {
   FiShield,
 } from "react-icons/fi";
 
-const API_BASE_URL = "http://localhost:5000/api/users";
+const API_BASE_URL = "https://the-craddle-cafe-backend.vercel.app/api/users";
 
 const SignUp = () => {
   const navigate = useNavigate();

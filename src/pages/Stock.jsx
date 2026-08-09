@@ -11,7 +11,7 @@ import {
 
 import SidebarLayout from "../components/SidebarLayout";
 
-const API_BASE = "http://localhost:5000/api/stock";
+const API_BASE = "https://the-craddle-cafe-backend.vercel.app/api/stock";
 
 const EMPTY_FILTERS = {
   search: "",
@@ -432,7 +432,7 @@ export default function Stock() {
   const loadProducts = useCallback(async () => {
     try {
       const res = await fetch(
-        "http://localhost:5000/api/products",
+        "https://the-craddle-cafe-backend.vercel.app/api/products",
         {
           headers: authHeaders(),
         }
