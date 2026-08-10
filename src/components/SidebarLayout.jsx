@@ -98,15 +98,22 @@ export default function SidebarLayout({
   /* ---------------------------------------------------------------
      Get user from localStorage
   ---------------------------------------------------------------- */
-  const user = (() => {
-    try {
-      const storedUser = localStorage.getItem("user");
-      return storedUser ? JSON.parse(storedUser) : null;
-    } catch (error) {
-      console.error("Failed to parse user:", error);
-      return null;
-    }
-  })();
+ const user = (() => {
+  try {
+    const storedUser = localStorage.getItem("user");
+    return storedUser ? JSON.parse(storedUser) : null;
+  } catch (error) {
+    console.error("Failed to parse user:", error);
+    return null;
+  }
+})();
+
+const handleLogout = () => {
+  localStorage.removeItem("user");
+  localStorage.removeItem("token");
+
+  window.location.href = "/signin";
+};
 
   /* ---------------------------------------------------------------
      Handle navigation
@@ -174,7 +181,7 @@ export default function SidebarLayout({
           {/* Logout */}
           <button
             type="button"
-            onClick={onLogout}
+            onClick={handleLogout}
             aria-label="Log out"
             className="flex h-9 w-9 items-center justify-center rounded-md text-[#5C6B73] transition-colors hover:bg-[#B23A34]/10 hover:text-[#B23A34]"
             title="Log out"
@@ -331,7 +338,7 @@ export default function SidebarLayout({
           {/* Logout */}
           <button
             type="button"
-            onClick={onLogout}
+            onClick={handleLogout}
             aria-label="Log out"
             className="shrink-0 rounded-md p-1.5 text-[#5C6B73] transition-colors hover:bg-[#B23A34]/10 hover:text-[#B23A34]"
           >
