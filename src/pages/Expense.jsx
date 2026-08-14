@@ -938,7 +938,10 @@ export default function Expense() {
                   >
                     {submitting
                       ? "Saving…"
-                      : "Save Expense"}
+                      : 
+                      type === "Cash In"
+                        ? "Save Cash In"
+                        : "Save Cash Out"}
                   </button>
                 </div>
               </form>
