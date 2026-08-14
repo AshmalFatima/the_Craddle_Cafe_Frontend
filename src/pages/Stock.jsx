@@ -7,6 +7,8 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   RefreshCw,
+  Filter,
+  ChevronDown,
 } from "lucide-react";
 
 import SidebarLayout from "../components/SidebarLayout";
@@ -26,6 +28,12 @@ const EMPTY_FORM = {
   unitStock: "",
   note: "",
 };
+
+// Shared styling for every filter input/select: a visible border, generous
+// padding, and a clear focus state — matches the field style used on the
+// Expense and Product pages.
+const FIELD_CLASS =
+  "w-full rounded-lg border border-[#D8D2C4] bg-white px-3.5 py-2.5 text-sm text-[#1C2B33] shadow-sm outline-none transition placeholder:text-[#A7AFA5] hover:border-[#B9B2A0] focus:border-[#2F6F63] focus:ring-4 focus:ring-[#2F6F63]/10";
 
 /* -------------------------------------------------------
    Helpers
@@ -70,6 +78,7 @@ function SummaryCard({
   color,
   active,
   onClick,
+  className = "",
 }) {
   const colors = {
     teal: {
@@ -103,30 +112,30 @@ function SummaryCard({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-xl border bg-white p-4 text-left transition ${
+      className={`w-full rounded-xl border bg-white p-3.5 text-left transition sm:p-4 ${
         active
           ? `${c.border} ring-2 ${c.ring} ring-offset-2 ring-offset-[#F7F5F0]`
           : "border-[#E4E0D6] hover:border-[#CFC9BC]"
-      }`}
+      } ${className}`}
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 rounded-full ${c.dot}`} />
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${c.dot}`} />
 
-          <span className="text-sm font-medium text-[#5C6B73]">
+          <span className="truncate text-sm font-medium text-[#5C6B73]">
             {title}
           </span>
         </div>
 
         <div
-          className={`flex h-8 w-8 items-center justify-center rounded-lg ${c.bg} ${c.text}`}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${c.bg} ${c.text}`}
         >
           <Icon className="h-4 w-4" />
         </div>
       </div>
 
       <div
-        className={`mt-3 text-2xl font-semibold ${
+        className={`mt-3 text-xl font-semibold sm:text-2xl ${
           active ? c.text : "text-[#1C2B33]"
         }`}
       >
@@ -415,6 +424,7 @@ export default function Stock() {
   const [error, setError] = useState("");
 
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("in");
@@ -598,6 +608,19 @@ export default function Stock() {
       outAmount,
     };
   }, [movements]);
+
+  /* -------------------------------------------------------
+     Active filter count (for the badge on the Filters toggle)
+  ------------------------------------------------------- */
+
+  const activeFilterCount = [
+    filters.search,
+    filters.type !== "all" ? filters.type : "",
+    filters.startDate,
+    filters.endDate,
+  ].filter(Boolean).length;
+
+  const hasFilters = activeFilterCount > 0;
 
   /* -------------------------------------------------------
      Modal Helpers
@@ -837,7 +860,12 @@ export default function Stock() {
           </div>
 
           {/* Summary Cards */}
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {/*
+            2 cards per row on mobile, 3 in a row from sm up. Total Movements
+            spans both mobile columns so it doesn't sit alone as a half-width
+            orphan on its own row.
+          */}
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
             <SummaryCard
               title="Stock In"
               quantity={summary.inUnits}
@@ -882,6 +910,7 @@ export default function Stock() {
               icon={Package}
               color="teal"
               active={activeCard === "all"}
+              className="col-span-2 sm:col-span-1"
               onClick={() => {
                 setActiveCard("all");
 
@@ -893,115 +922,168 @@ export default function Stock() {
             />
           </div>
 
-          {/* Filters */}
-          <div className="mb-6 rounded-xl border border-[#E4E0D6] bg-white p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {/* ================= FILTERS ================= */}
+          {/*
+            Same pattern as the Expense / Product pages: a labeled card with
+            a funnel icon + active-filter badge, collapsible on mobile
+            (header is the toggle), always expanded on sm+, fields in a
+            responsive grid with proper borders, and a Clear action row.
+          */}
+          <div className="mb-6 rounded-xl border border-[#E4E0D6] bg-white">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left sm:cursor-default"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2F6F63]/10 text-[#2F6F63]">
+                  <Filter className="h-4 w-4" />
+                </span>
 
-              {/* Search */}
-              <div className="lg:col-span-2">
-                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                  Search
-                </label>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-[#1C2B33]">
+                      Filters
+                    </h2>
 
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A969C]" />
+                    {activeFilterCount > 0 && (
+                      <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[#2F6F63] px-1.5 text-[11px] font-bold text-white">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-0.5 text-xs text-[#8A969C]">
+                    Search or narrow the movement history.
+                  </p>
+                </div>
+              </div>
+
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 text-[#8A969C] transition-transform sm:hidden ${
+                  filtersOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            <div
+              className={`border-t border-[#E4E0D6] px-4 pb-4 pt-4 ${
+                filtersOpen ? "block" : "hidden"
+              } sm:block`}
+            >
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+                {/* Search */}
+                <div className="col-span-2 lg:col-span-2">
+                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                    Search
+                  </label>
+
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A969C]" />
+
+                    <input
+                      type="text"
+                      value={filters.search}
+                      onChange={(e) =>
+                        setFilters((f) => ({
+                          ...f,
+                          search: e.target.value,
+                        }))
+                      }
+                      placeholder="Search product or note..."
+                      className={`${FIELD_CLASS} pl-10`}
+                    />
+                  </div>
+                </div>
+
+                {/* Type */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                    Type
+                  </label>
+
+                  <div className="relative">
+                    <select
+                      value={filters.type}
+                      onChange={(e) => {
+                        const value = e.target.value;
+
+                        setFilters((f) => ({
+                          ...f,
+                          type: value,
+                        }));
+
+                        setActiveCard(
+                          value === "in"
+                            ? "in"
+                            : value === "out"
+                            ? "out"
+                            : "all"
+                        );
+                      }}
+                      className={`${FIELD_CLASS} appearance-none pr-9`}
+                    >
+                      <option value="all">All</option>
+                      <option value="in">Stock In</option>
+                      <option value="out">Stock Out</option>
+                    </select>
+
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8A969C]" />
+                  </div>
+                </div>
+
+                {/* From */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                    From
+                  </label>
 
                   <input
-                    type="text"
-                    value={filters.search}
+                    type="date"
+                    value={filters.startDate}
                     onChange={(e) =>
                       setFilters((f) => ({
                         ...f,
-                        search: e.target.value,
+                        startDate: e.target.value,
                       }))
                     }
-                    placeholder="Search product or note..."
-                    className="w-full rounded-lg border border-[#E4E0D6] bg-white py-2.5 pl-9 pr-3 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
+                    className={FIELD_CLASS}
+                  />
+                </div>
+
+                {/* To */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
+                    To
+                  </label>
+
+                  <input
+                    type="date"
+                    value={filters.endDate}
+                    min={filters.startDate || undefined}
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        endDate: e.target.value,
+                      }))
+                    }
+                    className={FIELD_CLASS}
                   />
                 </div>
               </div>
 
-              {/* Type */}
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                  Type
-                </label>
-
-                <select
-                  value={filters.type}
-                  onChange={(e) => {
-                    const value = e.target.value;
-
-                    setFilters((f) => ({
-                      ...f,
-                      type: value,
-                    }));
-
-                    setActiveCard(
-                      value === "in"
-                        ? "in"
-                        : value === "out"
-                        ? "out"
-                        : "all"
-                    );
-                  }}
-                  className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
+              <div className="mt-4 flex justify-end border-t border-[#E4E0D6] pt-4">
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  disabled={!hasFilters}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4E0D6] px-3.5 py-2 text-sm font-medium text-[#5C6B73] transition hover:bg-[#F7F5F0] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="all">All</option>
-                  <option value="in">Stock In</option>
-                  <option value="out">Stock Out</option>
-                </select>
+                  <X className="h-4 w-4" />
+                  Clear Filters
+                </button>
               </div>
-
-              {/* From */}
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                  From
-                </label>
-
-                <input
-                  type="date"
-                  value={filters.startDate}
-                  onChange={(e) =>
-                    setFilters((f) => ({
-                      ...f,
-                      startDate: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-                />
-              </div>
-
-              {/* To */}
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#5C6B73]">
-                  To
-                </label>
-
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  min={filters.startDate || undefined}
-                  onChange={(e) =>
-                    setFilters((f) => ({
-                      ...f,
-                      endDate: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-                />
-              </div>
-            </div>
-
-            <div className="mt-3 flex justify-end">
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4E0D6] px-3.5 py-2 text-sm font-medium text-[#5C6B73] transition hover:bg-[#F7F5F0]"
-              >
-                <X className="h-4 w-4" />
-                Clear Filters
-              </button>
             </div>
           </div>
 

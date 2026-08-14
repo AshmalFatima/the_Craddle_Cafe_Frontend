@@ -108,6 +108,34 @@ const IconTrash = (props) => (
   </svg>
 );
 
+const IconFilter = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M4 5h16l-6 7.5V19l-4 2v-8.5L4 5z" />
+  </svg>
+);
+
+const IconChevronDown = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
 export default function Expense() {
   const [expenses, setExpenses] = useState([]);
 
@@ -132,6 +160,8 @@ export default function Expense() {
   const [formError, setFormError] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // ------------------------------------------------------------
   // Query parameters
@@ -398,6 +428,7 @@ export default function Expense() {
       ),
       sub: "Combined activity",
       accent: "teal",
+      clickable: true,
     },
     {
       key: TYPES.CASH_IN,
@@ -405,6 +436,7 @@ export default function Expense() {
       value: formatCurrency(totals.cashIn),
       sub: `${totals.cashInCount ?? 0} entries`,
       accent: "emerald",
+      clickable: true,
     },
     {
       key: TYPES.CASH_OUT,
@@ -412,6 +444,18 @@ export default function Expense() {
       value: formatCurrency(totals.cashOut),
       sub: `${totals.cashOutCount ?? 0} entries`,
       accent: "rose",
+      clickable: true,
+    },
+    {
+      key: "balance",
+      label: "Balance",
+      value: formatCurrency(
+        totals.balance ??
+          (totals.cashIn || 0) - (totals.cashOut || 0)
+      ),
+      sub: "Net position",
+      accent: "indigo",
+      clickable: false,
     },
   ];
 
@@ -439,7 +483,23 @@ export default function Expense() {
       dot: "bg-rose-600",
       bg: "bg-rose-50",
     },
+
+    indigo: {
+      ring: "ring-indigo-600",
+      border: "border-indigo-200",
+      text: "text-indigo-700",
+      dot: "bg-indigo-600",
+      bg: "bg-indigo-50",
+    },
   };
+
+  // ------------------------------------------------------------
+  // Active filter count (for the badge on the Filters toggle)
+  // ------------------------------------------------------------
+
+  const activeFilterCount = Object.values(filters).filter(
+    (value) => value !== "" && value !== null && value !== undefined
+  ).length;
 
   // ------------------------------------------------------------
   // USER
@@ -504,26 +564,32 @@ export default function Expense() {
 
           {/* ==================================================
               SUMMARY CARDS
+              2 columns on mobile (2x2 grid), 4 columns from sm up
           ================================================== */}
 
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
             {cardMeta.map((card) => {
               const a = accentClasses[card.accent];
 
               const isActive =
                 activeFilter === card.key;
 
+              const Wrapper = card.clickable ? "button" : "div";
+
               return (
-                <button
+                <Wrapper
                   key={card.key}
-                  onClick={() =>
-                    setActiveFilter(card.key)
+                  type={card.clickable ? "button" : undefined}
+                  onClick={
+                    card.clickable
+                      ? () => setActiveFilter(card.key)
+                      : undefined
                   }
-                  className={`rounded-xl border bg-white p-4 text-left transition-all ${
+                  className={`rounded-xl border bg-white p-3 sm:p-4 text-left transition-all ${
                     isActive
                       ? `${a.border} ring-2 ${a.ring} ring-offset-2 ring-offset-slate-50`
                       : "border-slate-200 hover:border-slate-300"
-                  }`}
+                  } ${!card.clickable ? "cursor-default" : ""}`}
                 >
                   <div className="mb-2 flex items-center gap-2">
                     <span
@@ -536,7 +602,7 @@ export default function Expense() {
                   </div>
 
                   <div
-                    className={`text-2xl font-semibold ${
+                    className={`text-xl sm:text-2xl font-semibold ${
                       isActive
                         ? a.text
                         : "text-slate-900"
@@ -548,131 +614,180 @@ export default function Expense() {
                   <div className="mt-1 text-xs text-slate-400">
                     {card.sub}
                   </div>
-                </button>
+                </Wrapper>
               );
             })}
           </div>
 
           {/* ==================================================
-              SEARCH / FILTER BAR
+              FILTERS PANEL
+
+              - Clearly labeled as "Filters" with an icon + active count badge.
+              - Header itself is a toggle on mobile (collapsed by default)
+                so the page doesn't open with a wall of inputs.
+              - On sm+ screens the panel is always expanded.
+              - Fields use a responsive grid: 2 cols on mobile,
+                more columns as the viewport grows.
           ================================================== */}
 
-          <form
-            onSubmit={handleSearchSubmit}
-            className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4"
-          >
-            <div className="min-w-[180px] flex-1">
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Description
-              </label>
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((open) => !open)}
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left sm:cursor-default"
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                  <IconFilter className="h-3.5 w-3.5" />
+                </span>
 
-              <input
-                type="text"
-                value={filters.description}
-                onChange={(e) =>
-                  setFilters((f) => ({
-                    ...f,
-                    description: e.target.value,
-                  }))
-                }
-                placeholder="Search notes…"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                <span className="text-sm font-semibold text-slate-800">
+                  Filters
+                </span>
+
+                {activeFilterCount > 0 && (
+                  <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-teal-700 px-1.5 text-xs font-medium text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </div>
+
+              <IconChevronDown
+                className={`h-4 w-4 text-slate-400 transition-transform sm:hidden ${
+                  filtersOpen ? "rotate-180" : ""
+                }`}
               />
-            </div>
+            </button>
 
-            <div className="w-28">
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Min amount
-              </label>
+            <form
+              onSubmit={handleSearchSubmit}
+              className={`border-t border-slate-100 px-4 pb-4 pt-4 ${
+                filtersOpen ? "block" : "hidden"
+              } sm:block`}
+            >
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="col-span-2 sm:col-span-3 lg:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    Description
+                  </label>
 
-              <input
-                type="number"
-                min="0"
-                value={filters.minAmount}
-                onChange={(e) =>
-                  setFilters((f) => ({
-                    ...f,
-                    minAmount: e.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-              />
-            </div>
+                  <div className="relative">
+                    <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
 
-            <div className="w-28">
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                Max amount
-              </label>
+                    <input
+                      type="text"
+                      value={filters.description}
+                      onChange={(e) =>
+                        setFilters((f) => ({
+                          ...f,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="Search notes…"
+                      className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    />
+                  </div>
+                </div>
 
-              <input
-                type="number"
-                min="0"
-                value={filters.maxAmount}
-                onChange={(e) =>
-                  setFilters((f) => ({
-                    ...f,
-                    maxAmount: e.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-              />
-            </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    Min amount
+                  </label>
 
-            <div className="w-40">
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                From
-              </label>
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={filters.minAmount}
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        minAmount: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  />
+                </div>
 
-              <input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) =>
-                  setFilters((f) => ({
-                    ...f,
-                    startDate: e.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-              />
-            </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    Max amount
+                  </label>
 
-            <div className="w-40">
-              <label className="mb-1 block text-xs font-medium text-slate-500">
-                To
-              </label>
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="decimal"
+                    placeholder="Any"
+                    value={filters.maxAmount}
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        maxAmount: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  />
+                </div>
 
-              <input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) =>
-                  setFilters((f) => ({
-                    ...f,
-                    endDate: e.target.value,
-                  }))
-                }
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
-              />
-            </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    From
+                  </label>
 
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
-              >
-                <IconSearch className="h-4 w-4" />
-                Search
-              </button>
+                  <input
+                    type="date"
+                    value={filters.startDate}
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        startDate: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  />
+                </div>
 
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-              >
-                <IconX className="h-4 w-4" />
-                Clear
-              </button>
-            </div>
-          </form>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-500">
+                    To
+                  </label>
+
+                  <input
+                    type="date"
+                    value={filters.endDate}
+                    onChange={(e) =>
+                      setFilters((f) => ({
+                        ...f,
+                        endDate: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  <IconX className="h-4 w-4" />
+                  Clear filters
+                </button>
+
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-700 px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-800"
+                >
+                  <IconSearch className="h-4 w-4" />
+                  Apply filters
+                </button>
+              </div>
+            </form>
+          </div>
 
           {/* ==================================================
               ERROR
@@ -938,8 +1053,7 @@ export default function Expense() {
                   >
                     {submitting
                       ? "Saving…"
-                      : 
-                      type === "Cash In"
+                      : form.type === "Cash In"
                         ? "Save Cash In"
                         : "Save Cash Out"}
                   </button>

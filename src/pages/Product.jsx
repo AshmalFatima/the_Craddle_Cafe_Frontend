@@ -8,6 +8,12 @@ import StockManageModal from "./StockManageModal";
 import ConfirmDialog from "./ConfirmDialog";
 import SidebarLayout from "../components/SidebarLayout";
 
+// Shared styling for every filter input/select: a visible border, generous
+// padding, clear focus state, and a hover cue — so fields read as
+// interactive controls rather than plain text.
+const FIELD_CLASS =
+  "w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 hover:border-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50";
+
 export default function Product() {
   const navigate = useNavigate();
 
@@ -21,6 +27,8 @@ export default function Product() {
   const [variantFilter, setVariantFilter] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
@@ -113,6 +121,14 @@ export default function Product() {
     variantFilter ||
     minPrice ||
     maxPrice;
+
+  const activeFilterCount = [
+    search,
+    categoryFilter,
+    variantFilter,
+    minPrice,
+    maxPrice,
+  ].filter(Boolean).length;
 
   function upsertProduct(updated) {
     if (!updated) return;
@@ -216,7 +232,11 @@ export default function Product() {
         </div>
 
         {/* ================= SUMMARY ================= */}
-        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/*
+          2 cards per row on mobile (2x2-style wrap), 3 in a row from sm up.
+          Card padding/text also scale down on mobile so 2-up doesn't feel cramped.
+        */}
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <SummaryCard
             label="Total products"
             value={products.length}
@@ -233,146 +253,239 @@ export default function Product() {
             label="Categories"
             value={categories.length}
             icon="category"
+            className="col-span-2 sm:col-span-1"
           />
         </div>
 
         {/* ================= SEARCH & FILTERS ================= */}
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/*
+          Same pattern as the Expense page: a labeled card with a funnel
+          icon + active-filter badge, collapsible on mobile (header is the
+          toggle), always expanded on sm+, fields in a responsive grid,
+          and a single clear action row on a divider at the bottom.
+        */}
+        <div className="mb-5 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left sm:cursor-default"
+          >
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 5h16l-6 7.5V19l-4 2v-8.5L4 5z" />
+                </svg>
+              </span>
 
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900">
-                Find a product
-              </h2>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-slate-900">
+                    Filters
+                  </h2>
 
-              <p className="mt-0.5 text-xs text-slate-500">
-                Search or narrow the list using filters.
-              </p>
+                  {activeFilterCount > 0 && (
+                    <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-bold text-white">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Search or narrow the product list.
+                </p>
+              </div>
             </div>
 
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="self-start text-xs font-semibold text-indigo-600 hover:text-indigo-700 sm:self-auto"
-              >
-                Clear all filters
-              </button>
-            )}
-          </div>
-
-          {/* SEARCH */}
-          <div className="relative mb-4">
             <svg
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-              width="19"
-              height="19"
+              className={`h-4 w-4 shrink-0 text-slate-400 transition-transform sm:hidden ${
+                filtersOpen ? "rotate-180" : ""
+              }`}
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
             >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-4-4" />
+              <path d="M6 9l6 6 6-6" />
             </svg>
+          </button>
 
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by product name, variant, SKU or category..."
-              className="w-full rounded-xl border-2 border-slate-200 bg-slate-50 py-3.5 pl-11 pr-4 text-sm font-medium text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-50"
-            />
-          </div>
+          <div
+            className={`border-t border-slate-100 px-5 pb-6 pt-5 ${
+              filtersOpen ? "block" : "hidden"
+            } sm:block`}
+          >
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="col-span-2 sm:col-span-3 lg:col-span-2">
+                <FilterField label="Search">
+                  <div className="relative">
+                    <svg
+                      className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="m20 20-4-4" />
+                    </svg>
 
-          {/* FILTERS */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Name, variant, SKU, category…"
+                      className={`${FIELD_CLASS} pl-10`}
+                    />
+                  </div>
+                </FilterField>
+              </div>
 
-            <FilterField label="Category">
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="filter-input"
-              >
-                <option value="">All categories</option>
+              <FilterField label="Category">
+                <div className="relative">
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className={`${FIELD_CLASS} appearance-none pr-9`}
+                  >
+                    <option value="">All categories</option>
 
-                {categories.map((c) => (
-                  <option key={c._id} value={c._id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
+                    {categories.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
 
-            <FilterField label="Variant">
-              <select
-                value={variantFilter}
-                onChange={(e) => setVariantFilter(e.target.value)}
-                className="filter-input"
-              >
-                <option value="">All variants</option>
+                  <SelectChevron />
+                </div>
+              </FilterField>
 
-                {variantOptions.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
+              <FilterField label="Variant">
+                <div className="relative">
+                  <select
+                    value={variantFilter}
+                    onChange={(e) => setVariantFilter(e.target.value)}
+                    className={`${FIELD_CLASS} appearance-none pr-9`}
+                  >
+                    <option value="">All variants</option>
 
-            <FilterField label="Minimum selling price">
-              <input
-                type="number"
-                min="0"
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
-                placeholder="No minimum"
-                className="filter-input"
-              />
-            </FilterField>
+                    {variantOptions.map((v) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
 
-            <FilterField label="Maximum selling price">
-              <input
-                type="number"
-                min="0"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
-                placeholder="No maximum"
-                className="filter-input"
-              />
-            </FilterField>
-          </div>
+                  <SelectChevron />
+                </div>
+              </FilterField>
 
-          {hasFilters && (
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-              <span className="text-xs font-medium text-slate-500">
-                Active filters:
-              </span>
+              <FilterField label="Min price">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">
+                    Rs
+                  </span>
 
-              {search && (
-                <FilterBadge label={`Search: ${search}`} />
-              )}
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="decimal"
+                    value={minPrice}
+                    onChange={(e) => setMinPrice(e.target.value)}
+                    placeholder="0"
+                    className={`${FIELD_CLASS} pl-9`}
+                  />
+                </div>
+              </FilterField>
 
-              {categoryFilter && (
-                <FilterBadge label="Category selected" />
-              )}
+              <FilterField label="Max price">
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-slate-400">
+                    Rs
+                  </span>
 
-              {variantFilter && (
-                <FilterBadge label={`Variant: ${variantFilter}`} />
-              )}
-
-              {minPrice && (
-                <FilterBadge
-                  label={`Min: ${formatCurrency(Number(minPrice))}`}
-                />
-              )}
-
-              {maxPrice && (
-                <FilterBadge
-                  label={`Max: ${formatCurrency(Number(maxPrice))}`}
-                />
-              )}
+                  <input
+                    type="number"
+                    min="0"
+                    inputMode="decimal"
+                    value={maxPrice}
+                    onChange={(e) => setMaxPrice(e.target.value)}
+                    placeholder="Any"
+                    className={`${FIELD_CLASS} pl-9`}
+                  />
+                </div>
+              </FilterField>
             </div>
-          )}
+
+            {hasFilters && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+                <span className="text-xs font-medium text-slate-500">
+                  Active:
+                </span>
+
+                {search && (
+                  <FilterBadge label={`Search: ${search}`} />
+                )}
+
+                {categoryFilter && (
+                  <FilterBadge
+                    label={`Category: ${
+                      categories.find((c) => c._id === categoryFilter)
+                        ?.name || "selected"
+                    }`}
+                  />
+                )}
+
+                {variantFilter && (
+                  <FilterBadge label={`Variant: ${variantFilter}`} />
+                )}
+
+                {minPrice && (
+                  <FilterBadge
+                    label={`Min: ${formatCurrency(Number(minPrice))}`}
+                  />
+                )}
+
+                {maxPrice && (
+                  <FilterBadge
+                    label={`Max: ${formatCurrency(Number(maxPrice))}`}
+                  />
+                )}
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={clearFilters}
+                disabled={!hasFilters}
+                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+                Clear filters
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ================= ERROR ================= */}
@@ -705,23 +818,25 @@ export default function Product() {
    SUMMARY CARD
 ========================================================= */
 
-function SummaryCard({ label, value, icon }) {
+function SummaryCard({ label, value, icon, className = "" }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+    <div
+      className={`rounded-2xl border border-slate-200 bg-white px-3.5 py-3.5 shadow-sm sm:px-5 sm:py-4 ${className}`}
+    >
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium text-slate-500">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium text-slate-500">
             {label}
           </p>
 
-          <p className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+          <p className="mt-1 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
             {value}
           </p>
         </div>
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 sm:h-10 sm:w-10">
           {icon === "box" && (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:h-[19px] sm:w-[19px]">
               <path d="m3 7 9-4 9 4-9 4-9-4Z" />
               <path d="M3 7v10l9 4 9-4V7" />
               <path d="M12 11v10" />
@@ -729,7 +844,7 @@ function SummaryCard({ label, value, icon }) {
           )}
 
           {icon === "filter" && (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:h-[19px] sm:w-[19px]">
               <path d="M4 6h16" />
               <path d="M7 12h10" />
               <path d="M10 18h4" />
@@ -737,7 +852,7 @@ function SummaryCard({ label, value, icon }) {
           )}
 
           {icon === "category" && (
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:h-[19px] sm:w-[19px]">
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="3" width="7" height="7" rx="1" />
               <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -757,7 +872,7 @@ function SummaryCard({ label, value, icon }) {
 function FilterField({ label, children }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+      <span className="mb-1.5 block text-xs font-semibold text-slate-600">
         {label}
       </span>
 
@@ -767,12 +882,32 @@ function FilterField({ label, children }) {
 }
 
 /* =========================================================
+   SELECT CHEVRON (visual affordance for styled <select> fields)
+========================================================= */
+
+function SelectChevron() {
+  return (
+    <svg
+      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+/* =========================================================
    FILTER BADGE
 ========================================================= */
 
 function FilterBadge({ label }) {
   return (
-    <span className="inline-flex items-center rounded-lg bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700">
+    <span className="inline-flex items-center rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700">
       {label}
     </span>
   );
