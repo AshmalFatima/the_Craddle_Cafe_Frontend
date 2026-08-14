@@ -98,22 +98,22 @@ export default function SidebarLayout({
   /* ---------------------------------------------------------------
      Get user from localStorage
   ---------------------------------------------------------------- */
- const user = (() => {
-  try {
-    const storedUser = localStorage.getItem("user");
-    return storedUser ? JSON.parse(storedUser) : null;
-  } catch (error) {
-    console.error("Failed to parse user:", error);
-    return null;
-  }
-})();
+  const user = (() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      return storedUser ? JSON.parse(storedUser) : null;
+    } catch (error) {
+      console.error("Failed to parse user:", error);
+      return null;
+    }
+  })();
 
-const handleLogout = () => {
-  localStorage.removeItem("user");
-  localStorage.removeItem("token");
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
 
-  window.location.href = "/signin";
-};
+    window.location.href = "/signin";
+  };
 
   /* ---------------------------------------------------------------
      Handle navigation
@@ -163,7 +163,7 @@ const handleLogout = () => {
               className="truncate text-sm font-semibold text-[#1C2B33]"
               style={{ fontFamily: "Space Grotesk, sans-serif" }}
             >
-              Shop admin
+              The Cradle Cafe
             </p>
           </div>
         </div>
@@ -197,11 +197,10 @@ const handleLogout = () => {
       <div
         onClick={() => setMobileOpen(false)}
         aria-hidden="true"
-        className={`fixed inset-0 z-40 bg-[#1C2B33]/40 transition-opacity md:hidden ${
-          mobileOpen
+        className={`fixed inset-0 z-40 bg-[#1C2B33]/40 transition-opacity md:hidden ${mobileOpen
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0"
-        }`}
+          }`}
       />
 
       {/* ============================================================
@@ -209,11 +208,10 @@ const handleLogout = () => {
           ============================================================ */}
       <aside
         aria-label="Main navigation"
-        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-[#E4E0D6] bg-[#F7F5F0] transition-transform duration-200 ease-out md:translate-x-0 ${
-          mobileOpen
+        className={`fixed inset-y-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col overflow-hidden border-r border-[#E4E0D6] bg-[#F7F5F0] transition-transform duration-200 ease-out md:translate-x-0 ${mobileOpen
             ? "translate-x-0 shadow-2xl"
             : "-translate-x-full"
-        }`}
+          }`}
         style={{ fontFamily: "Inter, sans-serif" }}
       >
         {/* ==========================================================
@@ -222,11 +220,12 @@ const handleLogout = () => {
         <div className="flex items-center justify-between gap-2 border-b border-[#E4E0D6] px-5 py-5">
           <div className="flex min-w-0 items-center gap-2.5">
             {/* Logo */}
-            <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#1C2B33] text-xs font-semibold text-[#F7F5F0]"
-              style={{ fontFamily: "Space Grotesk, sans-serif" }}
-            >
-              SH
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md">
+              <img
+                src="favicon.ico"
+                alt="The Cradle Cafe logo"
+                className="h-full w-full object-contain"
+              />
             </div>
 
             {/* App name */}
@@ -235,7 +234,7 @@ const handleLogout = () => {
                 className="truncate text-sm font-semibold text-[#1C2B33]"
                 style={{ fontFamily: "Space Grotesk, sans-serif" }}
               >
-                Shop admin
+                The Cradle Cafe
               </p>
 
               <p className="truncate text-[11px] text-[#5C6B73]">
@@ -298,11 +297,10 @@ const handleLogout = () => {
                     type="button"
                     onClick={() => handleSelect(item)}
                     aria-current={active ? "page" : undefined}
-                    className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm font-medium transition-colors ${
-                      active
+                    className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-left text-sm font-medium transition-colors ${active
                         ? "bg-[#2F6F63]/10 text-[#2F6F63]"
                         : "text-[#5C6B73] hover:bg-[#E4E0D6]/60 hover:text-[#1C2B33]"
-                    }`}
+                      }`}
                   >
                     <Icon className="h-[18px] w-[18px] shrink-0" />
 
