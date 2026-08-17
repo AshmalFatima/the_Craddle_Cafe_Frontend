@@ -648,12 +648,12 @@ function ProductLines({ lines, onChange }) {
                       {p.name}
                     </span>
 
-                    {p.variant && (
+                    
                       <span className="text-slate-500">
                         {' '}
                         ({p.variant})
                       </span>
-                    )}
+                   
 
                     <span className="text-slate-500">
                       {' '}
