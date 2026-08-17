@@ -70,20 +70,264 @@ function SummaryCard({ label, value, tone }) {
 }
 
 // ---------- Customer picker ----------
+// ---------- Add Customer Modal ----------
+function AddCustomerModal({ onClose, onCreated }) {
+  const [name, setName] = useState('');
+  const [contact, setContact] = useState('');
+  const [errors, setErrors] = useState({});
+  const [serverError, setServerError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const validate = () => {
+    const newErrors = {};
+
+    const cleanName = name.trim();
+    const cleanContact = contact.trim();
+
+    // Name validation
+    if (!cleanName) {
+      newErrors.name = 'Customer name is required';
+    } else if (cleanName.length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    } else if (cleanName.length > 50) {
+      newErrors.name = 'Name cannot exceed 50 characters';
+    } else if (!/^[A-Za-zÀ-ÿ.' -]+$/.test(cleanName)) {
+      newErrors.name =
+        'Name can only contain letters, spaces, dots, apostrophes and hyphens';
+    }
+
+    // Contact validation
+    if (!cleanContact) {
+      newErrors.contact = 'Contact number is required';
+    } else if (!/^03\d{9}$/.test(cleanContact)) {
+      newErrors.contact =
+        'Enter a valid Pakistani mobile number (03XXXXXXXXX)';
+    }
+
+    setErrors(newErrors);
+
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNameChange = (e) => {
+    const value = e.target.value;
+
+    // Don't allow more than 50 characters
+    if (value.length <= 50) {
+      setName(value);
+
+      if (errors.name) {
+        setErrors((prev) => ({
+          ...prev,
+          name: '',
+        }));
+      }
+    }
+  };
+
+  const handleContactChange = (e) => {
+    // Only digits
+    const value = e.target.value.replace(/\D/g, '');
+
+    // Maximum 11 digits
+    if (value.length <= 11) {
+      setContact(value);
+
+      if (errors.contact) {
+        setErrors((prev) => ({
+          ...prev,
+          contact: '',
+        }));
+      }
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    setServerError('');
+
+    if (!validate()) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/customers`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          name: name.trim(),
+          contact: contact.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || 'Could not add customer'
+        );
+      }
+
+      const createdCustomer =
+        data.customer || data;
+
+      onCreated(createdCustomer);
+    } catch (err) {
+      setServerError(
+        err.message || 'Could not add customer'
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">
+              Add customer
+            </h2>
+
+            <p className="mt-0.5 text-xs text-slate-500">
+              Enter the customer's basic information
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Form */}
+        <form
+          onSubmit={handleSubmit}
+          className="px-5 py-5 space-y-4"
+        >
+          {/* Name */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Customer name
+              <span className="text-rose-500 ml-1">*</span>
+            </label>
+
+            <input
+              type="text"
+              value={name}
+              onChange={handleNameChange}
+              placeholder="e.g. Ali Khan"
+              autoFocus
+              disabled={saving}
+              className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition ${
+                errors.name
+                  ? 'border-rose-300 focus:ring-2 focus:ring-rose-100'
+                  : 'border-slate-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-100'
+              }`}
+            />
+
+            <div className="mt-1 flex justify-between">
+              <div>
+                {errors.name && (
+                  <p className="text-xs text-rose-600">
+                    {errors.name}
+                  </p>
+                )}
+              </div>
+
+              <span className="text-[11px] text-slate-400">
+                {name.length}/50
+              </span>
+            </div>
+          </div>
+
+          {/* Contact */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              Contact number
+              <span className="text-rose-500 ml-1">*</span>
+            </label>
+
+            <input
+              type="tel"
+              inputMode="numeric"
+              value={contact}
+              onChange={handleContactChange}
+              placeholder="03XXXXXXXXX"
+              disabled={saving}
+              maxLength={11}
+              className={`w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition ${
+                errors.contact
+                  ? 'border-rose-300 focus:ring-2 focus:ring-rose-100'
+                  : 'border-slate-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-100'
+              }`}
+            />
+
+            {errors.contact ? (
+              <p className="mt-1 text-xs text-rose-600">
+                {errors.contact}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-400">
+                Enter 11 digits, e.g. 03001234567
+              </p>
+            )}
+          </div>
+
+          {/* Server error */}
+          {serverError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5">
+              <p className="text-sm text-rose-700">
+                {serverError}
+              </p>
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="flex-1 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Adding...' : 'Add customer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+// ---------- Customer Picker ----------
 function CustomerPicker({ value, onChange }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({
-    name: '',
-    contact: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [showAddCustomer, setShowAddCustomer] =
+    useState(false);
 
   useEffect(() => {
-    if (!query) {
+    if (!query.trim()) {
       setResults([]);
       return;
     }
@@ -91,7 +335,7 @@ function CustomerPicker({ value, onChange }) {
     const timeout = setTimeout(async () => {
       try {
         const params = new URLSearchParams({
-          search: query,
+          search: query.trim(),
         });
 
         const res = await fetch(
@@ -104,10 +348,16 @@ function CustomerPicker({ value, onChange }) {
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.message || 'Could not search customers');
+          throw new Error(
+            data.message || 'Could not search customers'
+          );
         }
 
-        setResults(data.customers || data || []);
+        setResults(
+          Array.isArray(data)
+            ? data
+            : data.customers || []
+        );
       } catch {
         setResults([]);
       }
@@ -116,185 +366,127 @@ function CustomerPicker({ value, onChange }) {
     return () => clearTimeout(timeout);
   }, [query]);
 
-  const handleCreateCustomer = async () => {
-    if (!newCustomer.name || !newCustomer.contact) {
-      setError('Name and contact are required');
-      return;
-    }
-
-    setSaving(true);
-    setError('');
-
-    try {
-      const res = await fetch(`${API_BASE}/customers`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(newCustomer),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Could not add customer');
-      }
-
-      const created = data.customer || data;
-
-      onChange(created);
-      setShowAddForm(false);
-      setOpen(false);
-      setQuery('');
-      setNewCustomer({
-        name: '',
-        contact: '',
-      });
-    } catch (err) {
-      setError(err.message || 'Could not add customer');
-    } finally {
-      setSaving(false);
-    }
-  };
-
+  // Customer already selected
   if (value) {
     return (
-      <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-        <div>
-          <p className="text-sm font-medium text-slate-900">
-            {value.name}
-          </p>
+      <>
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <div>
+            <p className="text-sm font-medium text-slate-900">
+              {value.name}
+            </p>
 
-          <p className="text-xs text-slate-500">
-            {value.contact}
-          </p>
+            <p className="text-xs text-slate-500">
+              {value.contact}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="text-xs text-slate-500 hover:text-slate-800 underline"
+            onClick={() => onChange(null)}
+          >
+            Change
+          </button>
         </div>
 
-        <button
-          type="button"
-          className="text-xs text-slate-500 hover:text-slate-800 underline"
-          onClick={() => onChange(null)}
-        >
-          Change
-        </button>
-      </div>
+        {showAddCustomer && (
+          <AddCustomerModal
+            onClose={() =>
+              setShowAddCustomer(false)
+            }
+            onCreated={(customer) => {
+              onChange(customer);
+              setShowAddCustomer(false);
+            }}
+          />
+        )}
+      </>
     );
   }
 
   return (
-    <div className="relative">
-      <input
-        type="text"
-        placeholder="Search customer by name or contact..."
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setOpen(true);
-          setShowAddForm(false);
-          setError('');
-        }}
-        onFocus={() => setOpen(true)}
-      />
+    <>
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search customer by name or contact..."
+          className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+        />
 
-      {open && query && (
-        <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-56 overflow-auto">
-          {results.length > 0 ? (
-            results.map((c) => (
-              <button
-                type="button"
-                key={c._id}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
-                onClick={() => {
-                  onChange(c);
-                  setOpen(false);
-                  setQuery('');
-                }}
-              >
-                <span className="font-medium text-slate-900">
-                  {c.name}
-                </span>{' '}
-                <span className="text-slate-500">
-                  — {c.contact}
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-3 text-sm text-slate-500">
-              No customer found for "{query}".
-            </div>
-          )}
+        {open && (
+          <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
+            {/* Search results */}
+            {query.trim() && (
+              <div className="max-h-48 overflow-auto">
+                {results.length > 0 ? (
+                  results.map((customer) => (
+                    <button
+                      type="button"
+                      key={customer._id}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                      onClick={() => {
+                        onChange(customer);
+                        setOpen(false);
+                        setQuery('');
+                      }}
+                    >
+                      <p className="font-medium text-slate-900">
+                        {customer.name}
+                      </p>
 
-          <button
-            type="button"
-            className="w-full text-left px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 border-t border-slate-100"
-            onClick={() => setShowAddForm(true)}
-          >
-            + Add new customer
-          </button>
-        </div>
-      )}
+                      <p className="text-xs text-slate-500">
+                        {customer.contact}
+                      </p>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-3 text-sm text-slate-500">
+                    No customer found.
+                  </div>
+                )}
+              </div>
+            )}
 
-      {showAddForm && (
-        <div className="mt-2 rounded-lg border border-slate-200 p-3 bg-slate-50 space-y-2">
-          <p className="text-xs font-medium text-slate-600">
-            New customer
-          </p>
-
-          <input
-            type="text"
-            placeholder="Full name"
-            className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-            value={newCustomer.name}
-            onChange={(e) =>
-              setNewCustomer((s) => ({
-                ...s,
-                name: e.target.value,
-              }))
-            }
-          />
-
-          <input
-            type="text"
-            placeholder="Contact number"
-            className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-            value={newCustomer.contact}
-            onChange={(e) =>
-              setNewCustomer((s) => ({
-                ...s,
-                contact: e.target.value,
-              }))
-            }
-          />
-
-          {error && (
-            <p className="text-xs text-rose-600">
-              {error}
-            </p>
-          )}
-
-          <div className="flex gap-2">
+            {/* Add customer */}
             <button
               type="button"
-              disabled={saving}
-              onClick={handleCreateCustomer}
-              className="flex-1 rounded-md bg-slate-900 text-white text-sm py-1.5 disabled:opacity-50"
-            >
-              {saving ? 'Adding...' : 'Add customer'}
-            </button>
-
-            <button
-              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 border-t border-slate-100"
               onClick={() => {
-                setShowAddForm(false);
-                setError('');
+                setShowAddCustomer(true);
+                setOpen(false);
               }}
-              className="rounded-md border border-slate-300 text-sm px-3 py-1.5"
             >
-              Cancel
+              <span className="text-lg leading-none">
+                +
+              </span>
+
+              <span>Add new customer</span>
             </button>
           </div>
-        </div>
+        )}
+      </div>
+
+      {showAddCustomer && (
+        <AddCustomerModal
+          onClose={() =>
+            setShowAddCustomer(false)
+          }
+          onCreated={(customer) => {
+            onChange(customer);
+            setShowAddCustomer(false);
+            setQuery('');
+            setOpen(false);
+          }}
+        />
       )}
-    </div>
+    </>
   );
 }
 
