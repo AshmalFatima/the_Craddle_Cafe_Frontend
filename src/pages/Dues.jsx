@@ -503,7 +503,7 @@ function rankProductMatch(product, rawQuery) {
   if (!q) return null;
 
   const name = (product.name || '').toLowerCase();
-  const variant = (product.variant || '').toLowerCase();
+  const variant = (product.variantName || '').toLowerCase();
   const sku = (product.sku || product.SKU || '').toLowerCase();
 
   if (name === q) return 0;
@@ -586,7 +586,7 @@ function ProductLines({ lines, onChange }) {
       {
         product: product._id,
         name: product.name,
-        variant: product.variant,
+        variant: product.variantName,
         quantity: 1,
         price: unitPrice,
       },
@@ -651,7 +651,7 @@ function ProductLines({ lines, onChange }) {
                     
                       <span className="text-slate-500">
                         {' '}
-                        ({p.variant})
+                        ({p.variantName || p.variant})
                       </span>
                    
 
@@ -705,10 +705,10 @@ function ProductLines({ lines, onChange }) {
                   <td className="px-3 py-2">
                     {l.name}
 
-                    {l.variant && (
+                    {l.variantName && (
                       <span className="text-slate-500">
                         {' '}
-                        ({l.variant})
+                        ({l.variantName || l.variant   })
                       </span>
                     )}
                   </td>
@@ -1187,10 +1187,10 @@ function DueDetailModal({
                           {p.product?.name ||
                             'Product removed'}
 
-                          {p.product?.variant && (
+                          {p.product?.variantName && (
                             <span className="text-slate-500">
                               {' '}
-                              ({p.product.variant})
+                              ({p.product.variantName})
                             </span>
                           )}
                         </td>
