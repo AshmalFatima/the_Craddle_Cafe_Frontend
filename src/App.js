@@ -8,7 +8,7 @@ import Expense from "./pages/Expense";
 import Category from "./pages/Category";
 import Stock from "./pages/Stock";
 import Dashboard2 from "./pages/Dashboard2";
-
+import Dues from "./pages/Dues";
 function App() {
   return (
     <>
@@ -23,6 +23,7 @@ function App() {
         <Route path="/categories" element={<Category />} />
         <Route path="/stock" element={<Stock />} />
         <Route path="/dashboard" element={<Dashboard2 />} />
+        <Route path="/dues" element={<Dues />} />
       </Routes>
     </>
   );

@@ -36,6 +36,12 @@ const NAV_ITEMS = [
     icon: ShoppingCart,
     href: "/stock",
   },
+  {
+    key: "dues",
+    label: "Dues",
+    icon: ShoppingCart,
+    href: "/dues",
+  }
 ];
 
 export default function SidebarLayout({
