@@ -651,7 +651,7 @@ function ProductLines({ lines, onChange }) {
                     
                       <span className="text-slate-500">
                         {' '}
-                        ({p.variantName || p.variant})
+                        ({p.variantName})
                       </span>
                    
 
