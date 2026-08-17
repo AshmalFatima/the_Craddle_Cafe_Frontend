@@ -7,12 +7,20 @@ import {
   Wallet,
   ShoppingCart,
   LogOut,
+  LayoutDashboard,
+  
   Menu,
   X,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   // { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    href: "/dashboard",
+  },
   {
     key: "categories",
     label: "Categories",
@@ -40,7 +48,7 @@ const NAV_ITEMS = [
   {
     key: "dues",
     label: "Dues",
-    icon: ShoppingCart,
+    icon: Wallet,
     href: "/dues",
   }
 ];

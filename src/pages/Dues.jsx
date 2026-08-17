@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import SidebarLayout from '../components/SidebarLayout';
 
 const API_BASE = 'https://the-craddle-cafe-backend.vercel.app/api';
@@ -19,6 +19,8 @@ const currency = (n) =>
     maximumFractionDigits: 0,
   }).format(n || 0);
 
+// Works on a single due OR an aggregated { paid, remaining } object —
+// both shapes carry the same two fields.
 const statusOf = (due) => {
   if (due.remaining === 0) return 'paid';
   if (due.paid === 0) return 'unpaid';
@@ -31,6 +33,8 @@ const STATUS_STYLES = {
   unpaid: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
+// Purely presentational — never clickable / editable. Just reflects the
+// paid vs remaining numbers it's given.
 function StatusBadge({ due }) {
   const status = statusOf(due);
 
@@ -576,6 +580,25 @@ function ProductLines({ lines, onChange }) {
   }, [productQuery]);
 
   const addLine = (product) => {
+    // Block adding a product that's already on the list. Instead of a
+    // silent duplicate line, tell the user and let them bump the qty
+    // on the existing line.
+    const existingIndex = lines.findIndex(
+      (l) => l.product === product._id
+    );
+
+    if (existingIndex !== -1) {
+      alert(
+        `${product.name}${
+          product.variantName ? ` (${product.variantName})` : ''
+        } is already added. You can increase its quantity in the table below instead.`
+      );
+
+      setProductQuery('');
+      setProductResults([]);
+      return;
+    }
+
     // Price always comes from the product's selling price — never editable
     // by hand, so the line total stays accurate to the catalog.
     const unitPrice = Number(
@@ -638,11 +661,19 @@ function ProductLines({ lines, onChange }) {
                   p.sellingPrice ?? p.price ?? 0
                 );
 
+                const alreadyAdded = lines.some(
+                  (l) => l.product === p._id
+                );
+
                 return (
                   <button
                     type="button"
                     key={p._id}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                    className={`w-full text-left px-3 py-2 text-sm border-b border-slate-100 last:border-0 ${
+                      alreadyAdded
+                        ? 'bg-slate-50 text-slate-400'
+                        : 'hover:bg-slate-50'
+                    }`}
                     onClick={() => addLine(p)}
                   >
                     <span className="font-medium text-slate-900">
@@ -660,6 +691,12 @@ function ProductLines({ lines, onChange }) {
                       {' '}
                       — {currency(unitPrice)}
                     </span>
+
+                    {alreadyAdded && (
+                      <span className="ml-2 text-[11px] text-amber-600">
+                        (already added)
+                      </span>
+                    )}
                   </button>
                 );
               })
@@ -758,8 +795,10 @@ function ProductLines({ lines, onChange }) {
 }
 
 // ---------- Add due modal ----------
-function AddDueModal({ onClose, onCreated }) {
-  const [customer, setCustomer] = useState(null);
+// presetCustomer: when opened from a customer's row/manage view, the
+// customer is pre-filled but can still be changed via "Change".
+function AddDueModal({ onClose, onCreated, presetCustomer = null }) {
+  const [customer, setCustomer] = useState(presetCustomer);
   const [lines, setLines] = useState([]);
   const [paid, setPaid] = useState('0');
   const [saving, setSaving] = useState(false);
@@ -1280,15 +1319,173 @@ function DueDetailModal({
   );
 }
 
+// ---------- Manage customer dues modal ----------
+// One place to see all of a customer's dues, drill into any of them,
+// jump into "add a new due" for them, or delete the customer entirely
+// (which removes every due of theirs too).
+function CustomerDuesModal({
+  customer,
+  dues,
+  onClose,
+  onChanged,
+  onAddDue,
+  onDelete,
+}) {
+  const [selectedDueId, setSelectedDueId] = useState(null);
+
+  const totals = dues.reduce(
+    (acc, d) => {
+      acc.totalAmount += d.totalAmount || 0;
+      acc.paid += d.paid || 0;
+      acc.remaining += d.remaining || 0;
+      return acc;
+    },
+    { totalAmount: 0, paid: 0, remaining: 0 }
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-xl rounded-xl bg-white shadow-xl max-h-[90vh] overflow-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-slate-900 truncate">
+              {customer.name}
+            </h2>
+
+            <p className="text-xs text-slate-500 truncate">
+              {customer.contact}
+            </p>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-700"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg bg-slate-50 px-3 py-2 min-w-0">
+              <p className="text-xs text-slate-500">Total</p>
+              <p className="text-sm font-semibold text-slate-900 truncate">
+                {currency(totals.totalAmount)}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-emerald-50 px-3 py-2 min-w-0">
+              <p className="text-xs text-emerald-700">Paid</p>
+              <p className="text-sm font-semibold text-emerald-700 truncate">
+                {currency(totals.paid)}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-rose-50 px-3 py-2 min-w-0">
+              <p className="text-xs text-rose-700">Remaining</p>
+              <p className="text-sm font-semibold text-rose-700 truncate">
+                {currency(totals.remaining)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-slate-700">
+              Dues ({dues.length})
+            </p>
+
+            <button
+              onClick={onAddDue}
+              className="rounded-lg bg-slate-900 text-white text-xs font-medium px-3 py-1.5 hover:bg-slate-800"
+            >
+              + Add due
+            </button>
+          </div>
+
+          {dues.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">
+              No dues for this customer.
+            </p>
+          ) : (
+            <div className="border border-slate-200 rounded-lg overflow-x-auto">
+              <table className="w-full text-sm min-w-[420px]">
+                <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
+                  <tr>
+                    <th className="text-left px-3 py-2">Date</th>
+                    <th className="text-right px-3 py-2">Total</th>
+                    <th className="text-right px-3 py-2">Paid</th>
+                    <th className="text-right px-3 py-2">Remaining</th>
+                    <th className="text-left px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {dues.map((due) => (
+                    <tr
+                      key={due._id}
+                      onClick={() => setSelectedDueId(due._id)}
+                      className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <td className="px-3 py-2">
+                        {due.createdAt
+                          ? new Date(due.createdAt).toLocaleDateString()
+                          : '—'}
+                      </td>
+
+                      <td className="px-3 py-2 text-right">
+                        {currency(due.totalAmount)}
+                      </td>
+
+                      <td className="px-3 py-2 text-right text-emerald-600">
+                        {currency(due.paid)}
+                      </td>
+
+                      <td className="px-3 py-2 text-right text-rose-600">
+                        {currency(due.remaining)}
+                      </td>
+
+                      <td className="px-3 py-2">
+                        <StatusBadge due={due} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 px-5 py-4 border-t border-slate-100">
+          <button
+            onClick={onDelete}
+            className="flex-1 rounded-lg border border-rose-300 text-rose-600 text-sm font-medium py-2 hover:bg-rose-50"
+          >
+            Delete customer &amp; dues
+          </button>
+
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-slate-300 text-sm px-4 py-2"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      {selectedDueId && (
+        <DueDetailModal
+          dueId={selectedDueId}
+          onClose={() => setSelectedDueId(null)}
+          onUpdated={onChanged}
+        />
+      )}
+    </div>
+  );
+}
+
 // ---------- Main page ----------
 function Dues() {
   const [dues, setDues] = useState([]);
-
-  const [summary, setSummary] = useState({
-    totalAmount: 0,
-    totalPaid: 0,
-    totalRemaining: 0,
-  });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1298,42 +1495,19 @@ function Dues() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const [selectedDueId, setSelectedDueId] =
-    useState(null);
+  const [showAddDue, setShowAddDue] = useState(false);
+  const [addDueCustomer, setAddDueCustomer] = useState(null); // preset customer, if any
 
-  const [showAddDue, setShowAddDue] =
-    useState(false);
+  const [manageCustomer, setManageCustomer] = useState(null); // customer object being managed
 
+  // Fetch the full, unfiltered list once (and whenever a due/customer is
+  // created, updated, or deleted). All filtering below happens on the client.
   const fetchDues = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const params = new URLSearchParams();
-
-      if (search) {
-        params.append('search', search);
-      }
-
-      if (status !== 'all') {
-        params.append('status', status);
-      }
-
-      if (startDate) {
-        params.append('startDate', startDate);
-      }
-
-      if (endDate) {
-        params.append('endDate', endDate);
-      }
-
-      const queryString = params.toString();
-
-      const url = queryString
-        ? `${API_BASE}/dues?${queryString}`
-        : `${API_BASE}/dues`;
-
-      const res = await fetch(url, {
+      const res = await fetch(`${API_BASE}/dues`, {
         headers: authHeaders(),
       });
 
@@ -1346,14 +1520,6 @@ function Dues() {
       }
 
       setDues(data.dues || []);
-
-      setSummary(
-        data.summary || {
-          totalAmount: 0,
-          totalPaid: 0,
-          totalRemaining: 0,
-        }
-      );
     } catch (err) {
       setError(
         err.message || 'Could not load dues'
@@ -1363,16 +1529,132 @@ function Dues() {
     } finally {
       setLoading(false);
     }
-  }, [search, status, startDate, endDate]);
+  }, []);
 
   useEffect(() => {
-    const timeout = setTimeout(
-      fetchDues,
-      300
+    fetchDues();
+  }, [fetchDues]);
+
+  // ---- Client-side filtering ----
+  const filteredDues = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    // Normalize the date range to cover the full end day.
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate) : null;
+    if (end) end.setHours(23, 59, 59, 999);
+
+    return dues.filter((due) => {
+      // Search by customer name or contact
+      if (term) {
+        const name = (due.customer?.name || '').toLowerCase();
+        const contact = (due.customer?.contact || '').toLowerCase();
+
+        if (!name.includes(term) && !contact.includes(term)) {
+          return false;
+        }
+      }
+
+      // Status filter
+      if (status !== 'all' && statusOf(due) !== status) {
+        return false;
+      }
+
+      // Date range filter
+      if (start || end) {
+        const createdAt = due.createdAt
+          ? new Date(due.createdAt)
+          : null;
+
+        if (!createdAt) return false;
+        if (start && createdAt < start) return false;
+        if (end && createdAt > end) return false;
+      }
+
+      return true;
+    });
+  }, [dues, search, status, startDate, endDate]);
+
+  // ---- Group the filtered dues by customer ----
+  // The table now shows one row per customer with an aggregated status,
+  // instead of one row per individual due record.
+  const customerGroups = useMemo(() => {
+    const map = new Map();
+
+    filteredDues.forEach((due) => {
+      const cust = due.customer;
+      if (!cust?._id) return;
+
+      if (!map.has(cust._id)) {
+        map.set(cust._id, {
+          customer: cust,
+          dues: [],
+          totalAmount: 0,
+          paid: 0,
+          remaining: 0,
+        });
+      }
+
+      const group = map.get(cust._id);
+      group.dues.push(due);
+      group.totalAmount += due.totalAmount || 0;
+      group.paid += due.paid || 0;
+      group.remaining += due.remaining || 0;
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      (a.customer.name || '').localeCompare(b.customer.name || '')
+    );
+  }, [filteredDues]);
+
+  // Summary cards are derived from the filtered results so they always
+  // reflect whatever the user is currently looking at.
+  const summary = useMemo(() => {
+    return filteredDues.reduce(
+      (acc, due) => {
+        acc.totalAmount += due.totalAmount || 0;
+        acc.totalPaid += due.paid || 0;
+        acc.totalRemaining += due.remaining || 0;
+        return acc;
+      },
+      { totalAmount: 0, totalPaid: 0, totalRemaining: 0 }
+    );
+  }, [filteredDues]);
+
+  const handleDeleteCustomer = async (customer) => {
+    const customerDues = dues.filter(
+      (d) => d.customer?._id === customer._id
     );
 
-    return () => clearTimeout(timeout);
-  }, [fetchDues]);
+    const warning = customerDues.length
+      ? `Delete ${customer.name} and all ${customerDues.length} of their due record(s)? This cannot be undone.`
+      : `Delete ${customer.name}? This cannot be undone.`;
+
+    if (!window.confirm(warning)) return;
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/customers/${customer._id}`,
+        {
+          method: 'DELETE',
+          headers: authHeaders(),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || 'Could not delete customer'
+        );
+      }
+
+      setManageCustomer(null);
+      fetchDues();
+    } catch (err) {
+      alert(err.message || 'Could not delete customer');
+    }
+  };
 
   return (
     <SidebarLayout activeKey="dues">
@@ -1383,7 +1665,10 @@ function Dues() {
           </h1>
 
           <button
-            onClick={() => setShowAddDue(true)}
+            onClick={() => {
+              setAddDueCustomer(null);
+              setShowAddDue(true);
+            }}
             className="shrink-0 rounded-lg bg-slate-900 text-white text-sm font-medium px-4 py-2 hover:bg-slate-800"
           >
             + Add due
@@ -1411,8 +1696,8 @@ function Dues() {
           />
 
           <SummaryCard
-            label="Total records"
-            value={dues.length}
+            label="Customers"
+            value={customerGroups.length}
             tone="count"
           />
         </div>
@@ -1502,9 +1787,10 @@ function Dues() {
           )}
         </div>
 
-        {/* Table — the only part of the page allowed to scroll horizontally */}
+        {/* Table — grouped by customer, one row each. The only part of
+            the page allowed to scroll horizontally. */}
         <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
+          <table className="w-full text-sm min-w-[760px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
               <tr>
                 <th className="text-left px-4 py-3">
@@ -1513,10 +1799,6 @@ function Dues() {
 
                 <th className="text-left px-4 py-3">
                   Contact
-                </th>
-
-                <th className="text-left px-4 py-3">
-                  Date
                 </th>
 
                 <th className="text-right px-4 py-3">
@@ -1533,6 +1815,10 @@ function Dues() {
 
                 <th className="text-left px-4 py-3">
                   Status
+                </th>
+
+                <th className="text-right px-4 py-3">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -1556,7 +1842,7 @@ function Dues() {
                     {error}
                   </td>
                 </tr>
-              ) : dues.length === 0 ? (
+              ) : customerGroups.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
@@ -1566,44 +1852,67 @@ function Dues() {
                   </td>
                 </tr>
               ) : (
-                dues.map((due) => (
+                customerGroups.map((group) => (
                   <tr
-                    key={due._id}
-                    onClick={() =>
-                      setSelectedDueId(due._id)
-                    }
-                    className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                    key={group.customer._id}
+                    className="border-t border-slate-100 hover:bg-slate-50"
                   >
                     <td className="px-4 py-3 font-medium text-slate-900">
-                      {due.customer?.name || '—'}
+                      {group.customer.name || '—'}
                     </td>
 
                     <td className="px-4 py-3 text-slate-600">
-                      {due.customer?.contact || '—'}
-                    </td>
-
-                    <td className="px-4 py-3 text-slate-600">
-                      {due.createdAt
-                        ? new Date(
-                            due.createdAt
-                          ).toLocaleDateString()
-                        : '—'}
+                      {group.customer.contact || '—'}
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      {currency(due.totalAmount)}
+                      {currency(group.totalAmount)}
                     </td>
 
                     <td className="px-4 py-3 text-right text-emerald-600">
-                      {currency(due.paid)}
+                      {currency(group.paid)}
                     </td>
 
                     <td className="px-4 py-3 text-right text-rose-600">
-                      {currency(due.remaining)}
+                      {currency(group.remaining)}
                     </td>
 
                     <td className="px-4 py-3">
-                      <StatusBadge due={due} />
+                      {/* Static badge — reflects aggregate status only,
+                          not clickable / editable. */}
+                      <StatusBadge due={group} />
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setAddDueCustomer(group.customer);
+                            setShowAddDue(true);
+                          }}
+                          className="rounded-lg border border-slate-300 text-xs font-medium px-2.5 py-1.5 text-slate-700 hover:bg-slate-50"
+                        >
+                          Add due
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            setManageCustomer(group.customer)
+                          }
+                          className="rounded-lg border border-slate-300 text-xs font-medium px-2.5 py-1.5 text-slate-700 hover:bg-slate-50"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleDeleteCustomer(group.customer)
+                          }
+                          className="rounded-lg border border-rose-200 text-xs font-medium px-2.5 py-1.5 text-rose-600 hover:bg-rose-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -1612,19 +1921,32 @@ function Dues() {
           </table>
         </div>
 
-        {selectedDueId && (
-          <DueDetailModal
-            dueId={selectedDueId}
-            onClose={() =>
-              setSelectedDueId(null)
-            }
-            onUpdated={fetchDues}
+        {manageCustomer && (
+          <CustomerDuesModal
+            customer={manageCustomer}
+            dues={dues
+              .filter((d) => d.customer?._id === manageCustomer._id)
+              .sort(
+                (a, b) =>
+                  new Date(b.createdAt) - new Date(a.createdAt)
+              )}
+            onClose={() => setManageCustomer(null)}
+            onChanged={fetchDues}
+            onAddDue={() => {
+              setAddDueCustomer(manageCustomer);
+              setShowAddDue(true);
+            }}
+            onDelete={() => handleDeleteCustomer(manageCustomer)}
           />
         )}
 
         {showAddDue && (
           <AddDueModal
-            onClose={() => setShowAddDue(false)}
+            presetCustomer={addDueCustomer}
+            onClose={() => {
+              setShowAddDue(false);
+              setAddDueCustomer(null);
+            }}
             onCreated={fetchDues}
           />
         )}

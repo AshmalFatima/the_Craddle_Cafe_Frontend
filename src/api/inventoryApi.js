@@ -74,4 +74,14 @@ export const inventoryApi = {
       headers: authHeaders(),
     }).then(handle);
   },
+  // Dashboard
+  dashboard: (filters = {}) => {
+    const params = new URLSearchParams(
+      Object.entries(filters).filter(([, v]) => v !== "" && v != null)
+    );
+    const qs = params.toString();
+    return fetch(`${BASE_URL}/dashboard${qs ? `?${qs}` : ""}`, {
+      headers: authHeaders(),
+    }).then(handle);
+  },
 };
