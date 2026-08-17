@@ -575,10 +575,10 @@ function ProductLines({ lines, onChange }) {
   }, [productQuery]);
 
   const addLine = (product) => {
-    // Price always comes from the product's unit price — never editable
+    // Price always comes from the product's selling price — never editable
     // by hand, so the line total stays accurate to the catalog.
     const unitPrice = Number(
-      product.unitPrice ?? product.price ?? 0
+      product.sellingPrice ?? product.price ?? 0
     );
 
     onChange([
@@ -634,7 +634,7 @@ function ProductLines({ lines, onChange }) {
             {productResults.length > 0 ? (
               productResults.map((p) => {
                 const unitPrice = Number(
-                  p.unitPrice ?? p.price ?? 0
+                  p.sellingPrice ?? p.price ?? 0
                 );
 
                 return (
