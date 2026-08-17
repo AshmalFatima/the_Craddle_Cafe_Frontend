@@ -107,6 +107,20 @@ const IconTrash = (props) => (
     <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
   </svg>
 );
+const IconEdit = (props) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
 
 const IconFilter = (props) => (
   <svg
@@ -152,6 +166,7 @@ export default function Expense() {
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
 
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -207,6 +222,17 @@ export default function Expense() {
   // ------------------------------------------------------------
   // Load expenses
   // ------------------------------------------------------------
+
+  const handleEditClick = (exp) => {
+  setEditingId(exp._id);
+  setForm({
+    amount: exp.amount ?? "",
+    type: exp.type || "Cash In",
+    note: exp.description || "",
+  });
+  setFormError("");
+  setModalOpen(true);
+};
 
   const loadExpenses = useCallback(async () => {
     setLoading(true);
@@ -330,54 +356,59 @@ export default function Expense() {
   // Add expense
   // ------------------------------------------------------------
 
-  const handleAddExpense = async (e) => {
-    e.preventDefault();
+const handleSubmitExpense = async (e) => {
+  e.preventDefault();
+  setFormError("");
 
-    setFormError("");
+  if (!form.amount || Number(form.amount) <= 0) {
+    setFormError("Enter an amount greater than 0");
+    return;
+  }
 
-    if (!form.amount || Number(form.amount) <= 0) {
-      setFormError("Enter an amount greater than 0");
-      return;
-    }
+  if (!form.type) {
+    setFormError("Select a type");
+    return;
+  }
 
-    if (!form.type) {
-      setFormError("Select a type");
-      return;
-    }
+  setSubmitting(true);
 
-    setSubmitting(true);
+  const isEditing = Boolean(editingId);
 
-    try {
-      const res = await fetch(`${API_BASE}/`, {
-        method: "POST",
+  try {
+    const res = await fetch(
+      isEditing ? `${API_BASE}/${editingId}` : `${API_BASE}/`,
+      {
+        method: isEditing ? "PUT" : "POST",
         headers: authHeaders(),
         body: JSON.stringify({
           amount: form.amount,
           type: form.type,
           description: form.note,
         }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(
-          data.message || "Failed to add expense"
-        );
       }
+    );
 
-      setModalOpen(false);
-      setForm(EMPTY_FORM);
+    const data = await res.json();
 
-      loadExpenses();
-      loadTotals();
-    } catch (err) {
-      setFormError(err.message || "Something went wrong");
-    } finally {
-      setSubmitting(false);
+    if (!res.ok) {
+      throw new Error(
+        data.message ||
+          `Failed to ${isEditing ? "update" : "add"} expense`
+      );
     }
-  };
 
+    setModalOpen(false);
+    setForm(EMPTY_FORM);
+    setEditingId(null);
+
+    loadExpenses();
+    loadTotals();
+  } catch (err) {
+    setFormError(err.message || "Something went wrong");
+  } finally {
+    setSubmitting(false);
+  }
+};
   // ------------------------------------------------------------
   // Delete
   // ------------------------------------------------------------
@@ -553,13 +584,17 @@ export default function Expense() {
               </p>
             </div>
 
-            <button
-              onClick={() => setModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800"
-            >
-              <IconPlus className="h-4 w-4" />
-              Add Expense
-            </button>
+       <button
+  onClick={() => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setModalOpen(true);
+  }}
+  className="inline-flex items-center gap-2 rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-800"
+>
+  <IconPlus className="h-4 w-4" />
+  Add Expense
+</button>
           </div>
 
           {/* ==================================================
@@ -899,7 +934,7 @@ export default function Expense() {
                             {formatCurrency(exp.amount)}
                           </td>
 
-                          <td className="max-w-xs truncate px-4 py-3 text-slate-600">
+                          <td className="max-w-xs  px-4 py-3 text-slate-600">
                             {exp.description || "—"}
                           </td>
 
@@ -914,15 +949,26 @@ export default function Expense() {
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() =>
-                                handleDelete(exp._id)
-                              }
-                              className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
-                              aria-label="Delete entry"
-                            >
-                              <IconTrash className="h-4 w-4" />
-                            </button>
+                          <td className="px-4 py-3 text-right">
+  <div className="flex items-center justify-end gap-1">
+    <button
+      onClick={() => handleEditClick(exp)}
+      className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-teal-50 hover:text-teal-600"
+      aria-label="Edit entry"
+    >
+      <IconEdit className="h-4 w-4" />
+    </button>
+
+    <button
+      onClick={() => handleDelete(exp._id)}
+      className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+      aria-label="Delete entry"
+    >
+      <IconTrash className="h-4 w-4" />
+    </button>
+  </div>
+</td>
+                       
                           </td>
                         </tr>
                       );
@@ -944,25 +990,26 @@ export default function Expense() {
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
 
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Add Expense
-                </h2>
+           <h2 className="text-lg font-semibold text-slate-900">
+  {editingId ? "Edit Expense" : "Add Expense"}
+</h2>
 
-                <button
-                  onClick={() => {
-                    setModalOpen(false);
-                    setForm(EMPTY_FORM);
-                    setFormError("");
-                  }}
-                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                  aria-label="Close"
-                >
-                  <IconX className="h-5 w-5" />
-                </button>
+<button
+  onClick={() => {
+    setModalOpen(false);
+    setForm(EMPTY_FORM);
+    setFormError("");
+    setEditingId(null);
+  }}
+  className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+  aria-label="Close"
+>
+  <IconX className="h-5 w-5" />
+</button>
               </div>
 
               <form
-                onSubmit={handleAddExpense}
+                onSubmit={handleSubmitExpense}
                 className="space-y-4"
               >
                 <div>
@@ -1035,28 +1082,31 @@ export default function Expense() {
 
                 <div className="flex justify-end gap-2 pt-1">
                   <button
-                    type="button"
-                    onClick={() => {
-                      setModalOpen(false);
-                      setForm(EMPTY_FORM);
-                      setFormError("");
-                    }}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
+  type="button"
+  onClick={() => {
+    setModalOpen(false);
+    setForm(EMPTY_FORM);
+    setFormError("");
+    setEditingId(null);
+  }}
+  className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+>
+  Cancel
+</button>
 
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-60"
-                  >
-                    {submitting
-                      ? "Saving…"
-                      : form.type === "Cash In"
-                        ? "Save Cash In"
-                        : "Save Cash Out"}
-                  </button>
+<button
+  type="submit"
+  disabled={submitting}
+  className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-60"
+>
+  {submitting
+    ? "Saving…"
+    : editingId
+      ? "Update Expense"
+      : form.type === "Cash In"
+        ? "Save Cash In"
+        : "Save Cash Out"}
+</button>
                 </div>
               </form>
             </div>
