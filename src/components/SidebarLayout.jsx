@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Tag,
   Package,
@@ -50,6 +51,8 @@ export default function SidebarLayout({
   onLogout,
   children,
 }) {
+
+  const navigate = useNavigate();
   const [internalActive, setInternalActive] = useState(() => {
     if (activeKey) return activeKey;
 
@@ -125,16 +128,19 @@ export default function SidebarLayout({
      Handle navigation
   ---------------------------------------------------------------- */
   const handleSelect = (item) => {
-    if (!activeKey) {
-      setInternalActive(item.key);
-    }
+  setMobileOpen(false);
 
-    setMobileOpen(false);
+  // Update internal active state
+  setInternalActive(item.key);
 
-    if (onNavigate) {
-      onNavigate(item);
-    }
-  };
+  // If parent wants to know about navigation
+  if (onNavigate) {
+    onNavigate(item);
+  }
+
+  // Actually navigate to the page
+  navigate(item.href);
+};
 
   /* ---------------------------------------------------------------
      User initials

@@ -500,7 +500,7 @@ function CustomerPicker({ value, onChange }) {
 // entirely instead of being shown alongside real matches.
 function rankProductMatch(product, rawQuery) {
   const q = rawQuery.trim().toLowerCase();
-
+    
   if (!q) return null;
 
   const name = (product.name || '').toLowerCase();
