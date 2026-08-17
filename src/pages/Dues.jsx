@@ -54,16 +54,19 @@ function SummaryCard({ label, value, tone }) {
     total: 'text-slate-900',
     paid: 'text-emerald-600',
     remaining: 'text-rose-600',
+    count: 'text-slate-900',
   };
 
+  const isCount = tone === 'count';
+
   return (
-    <div className="flex-1 min-w-[160px] rounded-xl border border-slate-200 bg-white px-5 py-4">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 sm:px-5">
       <p className="text-xs uppercase tracking-wide text-slate-500">
         {label}
       </p>
 
-      <p className={`mt-1 text-2xl font-semibold ${toneClasses[tone]}`}>
-        {currency(value)}
+      <p className={`mt-1 text-xl sm:text-2xl font-semibold ${toneClasses[tone]}`}>
+        {isCount ? value : currency(value)}
       </p>
     </div>
   );
@@ -490,13 +493,49 @@ function CustomerPicker({ value, onChange }) {
   );
 }
 
+// ---------- Product search relevance ----------
+// Ranks a product against the typed query so the best match (by name,
+// variant, or SKU) always sorts first, and unrelated products are dropped
+// entirely instead of being shown alongside real matches.
+function rankProductMatch(product, rawQuery) {
+  const q = rawQuery.trim().toLowerCase();
+
+  if (!q) return null;
+
+  const name = (product.name || '').toLowerCase();
+  const variant = (product.variant || '').toLowerCase();
+  const sku = (product.sku || product.SKU || '').toLowerCase();
+
+  if (name === q) return 0;
+  if (name.startsWith(q)) return 1;
+  if (sku === q) return 2;
+  if (variant === q) return 2;
+  if (sku.startsWith(q)) return 3;
+  if (variant.startsWith(q)) return 3;
+  if (name.includes(q)) return 4;
+  if (variant.includes(q) || sku.includes(q)) return 5;
+
+  return null; // no real match — exclude from results
+}
+
+function filterAndRankProducts(products, query) {
+  return products
+    .map((p) => ({ product: p, rank: rankProductMatch(p, query) }))
+    .filter((entry) => entry.rank !== null)
+    .sort((a, b) => {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      return (a.product.name || '').localeCompare(b.product.name || '');
+    })
+    .map((entry) => entry.product);
+}
+
 // ---------- Product line items ----------
 function ProductLines({ lines, onChange }) {
   const [productQuery, setProductQuery] = useState('');
   const [productResults, setProductResults] = useState([]);
 
   useEffect(() => {
-    if (!productQuery) {
+    if (!productQuery.trim()) {
       setProductResults([]);
       return;
     }
@@ -504,7 +543,7 @@ function ProductLines({ lines, onChange }) {
     const timeout = setTimeout(async () => {
       try {
         const params = new URLSearchParams({
-          search: productQuery,
+          search: productQuery.trim(),
         });
 
         const res = await fetch(
@@ -520,7 +559,13 @@ function ProductLines({ lines, onChange }) {
           throw new Error(data.message || 'Could not search products');
         }
 
-        setProductResults(data.products || data || []);
+        const rawResults = data.products || data || [];
+
+        // Defensive client-side filter/sort: only show products that
+        // actually match the typed name/variant/SKU, best match first.
+        setProductResults(
+          filterAndRankProducts(rawResults, productQuery)
+        );
       } catch {
         setProductResults([]);
       }
@@ -530,6 +575,12 @@ function ProductLines({ lines, onChange }) {
   }, [productQuery]);
 
   const addLine = (product) => {
+    // Price always comes from the product's unit price — never editable
+    // by hand, so the line total stays accurate to the catalog.
+    const unitPrice = Number(
+      product.unitPrice ?? product.price ?? 0
+    );
+
     onChange([
       ...lines,
       {
@@ -537,7 +588,7 @@ function ProductLines({ lines, onChange }) {
         name: product.name,
         variant: product.variant,
         quantity: 1,
-        price: product.price || 0,
+        price: unitPrice,
       },
     ]);
 
@@ -545,12 +596,14 @@ function ProductLines({ lines, onChange }) {
     setProductResults([]);
   };
 
-  const updateLine = (index, field, value) => {
+  const updateQuantity = (index, value) => {
     const next = [...lines];
+
+    const qty = Math.max(1, Number(value) || 1);
 
     next[index] = {
       ...next[index],
-      [field]: Number(value),
+      quantity: qty,
     };
 
     onChange(next);
@@ -576,32 +629,44 @@ function ProductLines({ lines, onChange }) {
           onChange={(e) => setProductQuery(e.target.value)}
         />
 
-        {productResults.length > 0 && (
+        {productQuery.trim() && (
           <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg max-h-56 overflow-auto">
-            {productResults.map((p) => (
-              <button
-                type="button"
-                key={p._id}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
-                onClick={() => addLine(p)}
-              >
-                <span className="font-medium text-slate-900">
-                  {p.name}
-                </span>
+            {productResults.length > 0 ? (
+              productResults.map((p) => {
+                const unitPrice = Number(
+                  p.unitPrice ?? p.price ?? 0
+                );
 
-                {p.variant && (
-                  <span className="text-slate-500">
-                    {' '}
-                    ({p.variant})
-                  </span>
-                )}
+                return (
+                  <button
+                    type="button"
+                    key={p._id}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                    onClick={() => addLine(p)}
+                  >
+                    <span className="font-medium text-slate-900">
+                      {p.name}
+                    </span>
 
-                <span className="text-slate-500">
-                  {' '}
-                  — {currency(p.price)}
-                </span>
-              </button>
-            ))}
+                    {p.variant && (
+                      <span className="text-slate-500">
+                        {' '}
+                        ({p.variant})
+                      </span>
+                    )}
+
+                    <span className="text-slate-500">
+                      {' '}
+                      — {currency(unitPrice)}
+                    </span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="px-3 py-3 text-sm text-slate-500">
+                No matching product found.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -620,7 +685,7 @@ function ProductLines({ lines, onChange }) {
                 </th>
 
                 <th className="text-right px-3 py-2 w-28">
-                  Price
+                  Unit price
                 </th>
 
                 <th className="text-right px-3 py-2 w-28">
@@ -655,29 +720,13 @@ function ProductLines({ lines, onChange }) {
                       className="w-16 text-right rounded border border-slate-300 px-1.5 py-1"
                       value={l.quantity}
                       onChange={(e) =>
-                        updateLine(
-                          i,
-                          'quantity',
-                          e.target.value
-                        )
+                        updateQuantity(i, e.target.value)
                       }
                     />
                   </td>
 
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min="0"
-                      className="w-24 text-right rounded border border-slate-300 px-1.5 py-1"
-                      value={l.price}
-                      onChange={(e) =>
-                        updateLine(
-                          i,
-                          'price',
-                          e.target.value
-                        )
-                      }
-                    />
+                  <td className="px-3 py-2 text-right text-slate-600">
+                    {currency(l.price)}
                   </td>
 
                   <td className="px-3 py-2 text-right font-medium">
@@ -711,7 +760,7 @@ function ProductLines({ lines, onChange }) {
 function AddDueModal({ onClose, onCreated }) {
   const [customer, setCustomer] = useState(null);
   const [lines, setLines] = useState([]);
-  const [paid, setPaid] = useState(0);
+  const [paid, setPaid] = useState('0');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -719,6 +768,24 @@ function AddDueModal({ onClose, onCreated }) {
     (sum, l) => sum + l.quantity * l.price,
     0
   );
+
+  const handlePaidChange = (e) => {
+    const raw = e.target.value;
+
+    // Allow the field to be freely rewritten, but never let it go negative.
+    if (raw === '') {
+      setPaid('');
+      return;
+    }
+
+    const value = Number(raw);
+
+    if (Number.isNaN(value)) {
+      return;
+    }
+
+    setPaid(String(Math.max(0, value)));
+  };
 
   const handleSubmit = async () => {
     setError('');
@@ -731,7 +798,9 @@ function AddDueModal({ onClose, onCreated }) {
       return setError('Add at least one product');
     }
 
-    if (Number(paid) > total) {
+    const paidValue = Math.max(0, Number(paid) || 0);
+
+    if (paidValue > total) {
       return setError('Paid amount cannot exceed total');
     }
 
@@ -748,7 +817,7 @@ function AddDueModal({ onClose, onCreated }) {
             quantity: l.quantity,
             price: l.price,
           })),
-          paid: Number(paid) || 0,
+          paid: paidValue,
         }),
       });
 
@@ -817,15 +886,19 @@ function AddDueModal({ onClose, onCreated }) {
               type="number"
               min="0"
               max={total}
+              step="1"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               value={paid}
-              onChange={(e) => setPaid(e.target.value)}
+              onChange={handlePaidChange}
+              onBlur={() => {
+                if (paid === '') setPaid('0');
+              }}
             />
 
             <p className="mt-1 text-xs text-slate-500">
               Remaining will be{' '}
               {currency(
-                total - (Number(paid) || 0)
+                total - Math.max(0, Number(paid) || 0)
               )}
             </p>
           </div>
@@ -1301,7 +1374,7 @@ function Dues() {
   }, [fetchDues]);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-slate-900">
           Dues
@@ -1315,8 +1388,8 @@ function Dues() {
         </button>
       </div>
 
-      {/* Summary */}
-      <div className="flex flex-wrap gap-4">
+      {/* Summary: 2 cards per row on mobile, 4 in a row on larger screens */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <SummaryCard
           label="Total dues"
           value={summary.totalAmount}
@@ -1333,6 +1406,12 @@ function Dues() {
           label="Total remaining"
           value={summary.totalRemaining}
           tone="remaining"
+        />
+
+        <SummaryCard
+          label="Total records"
+          value={dues.length}
+          tone="count"
         />
       </div>
 
@@ -1422,7 +1501,7 @@ function Dues() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
             <tr>
