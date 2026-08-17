@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import SidebarLayout from '../components/SidebarLayout';
 
 const API_BASE = 'https://the-craddle-cafe-backend.vercel.app/api';
 
@@ -60,12 +61,12 @@ function SummaryCard({ label, value, tone }) {
   const isCount = tone === 'count';
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 sm:px-5">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 sm:px-5 min-w-0">
       <p className="text-xs uppercase tracking-wide text-slate-500">
         {label}
       </p>
 
-      <p className={`mt-1 text-xl sm:text-2xl font-semibold ${toneClasses[tone]}`}>
+      <p className={`mt-1 text-xl sm:text-2xl font-semibold truncate ${toneClasses[tone]}`}>
         {isCount ? value : currency(value)}
       </p>
     </div>
@@ -374,19 +375,19 @@ function CustomerPicker({ value, onChange }) {
     return (
       <>
         <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <div>
-            <p className="text-sm font-medium text-slate-900">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-900 truncate">
               {value.name}
             </p>
 
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 truncate">
               {value.contact}
             </p>
           </div>
 
           <button
             type="button"
-            className="text-xs text-slate-500 hover:text-slate-800 underline"
+            className="shrink-0 text-xs text-slate-500 hover:text-slate-800 underline"
             onClick={() => onChange(null)}
           >
             Change
@@ -410,7 +411,7 @@ function CustomerPicker({ value, onChange }) {
 
   return (
     <>
-      <div className="relative">
+      <div className="relative min-w-0">
         <input
           type="text"
           placeholder="Search customer by name or contact..."
@@ -619,8 +620,8 @@ function ProductLines({ lines, onChange }) {
   );
 
   return (
-    <div>
-      <div className="relative">
+    <div className="min-w-0">
+      <div className="relative min-w-0">
         <input
           type="text"
           placeholder="Search product to add..."
@@ -672,8 +673,8 @@ function ProductLines({ lines, onChange }) {
       </div>
 
       {lines.length > 0 && (
-        <div className="mt-3 border border-slate-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="mt-3 border border-slate-200 rounded-lg overflow-x-auto">
+          <table className="w-full text-sm min-w-[480px]">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
               <tr>
                 <th className="text-left px-3 py-2">
@@ -1142,12 +1143,12 @@ function DueDetailModal({
           <>
             <div className="px-5 py-4 space-y-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">
                     {due.customer?.name}
                   </p>
 
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 truncate">
                     {due.customer?.contact}
                   </p>
                 </div>
@@ -1155,8 +1156,8 @@ function DueDetailModal({
                 <StatusBadge due={due} />
               </div>
 
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="border border-slate-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-sm min-w-[420px]">
                   <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
                     <tr>
                       <th className="text-left px-3 py-2">
@@ -1213,32 +1214,32 @@ function DueDetailModal({
               </div>
 
               <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                <div className="rounded-lg bg-slate-50 px-3 py-2 min-w-0">
                   <p className="text-xs text-slate-500">
                     Total
                   </p>
 
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="text-sm font-semibold text-slate-900 truncate">
                     {currency(due.totalAmount)}
                   </p>
                 </div>
 
-                <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                <div className="rounded-lg bg-emerald-50 px-3 py-2 min-w-0">
                   <p className="text-xs text-emerald-700">
                     Paid
                   </p>
 
-                  <p className="text-sm font-semibold text-emerald-700">
+                  <p className="text-sm font-semibold text-emerald-700 truncate">
                     {currency(due.paid)}
                   </p>
                 </div>
 
-                <div className="rounded-lg bg-rose-50 px-3 py-2">
+                <div className="rounded-lg bg-rose-50 px-3 py-2 min-w-0">
                   <p className="text-xs text-rose-700">
                     Remaining
                   </p>
 
-                  <p className="text-sm font-semibold text-rose-700">
+                  <p className="text-sm font-semibold text-rose-700 truncate">
                     {currency(due.remaining)}
                   </p>
                 </div>
@@ -1374,259 +1375,261 @@ function Dues() {
   }, [fetchDues]);
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900">
-          Dues
-        </h1>
+    <SidebarLayout activeKey="dues">
+      <div className="w-full max-w-full min-w-0 space-y-6 overflow-x-hidden">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-slate-900">
+            Dues
+          </h1>
 
-        <button
-          onClick={() => setShowAddDue(true)}
-          className="rounded-lg bg-slate-900 text-white text-sm font-medium px-4 py-2 hover:bg-slate-800"
-        >
-          + Add due
-        </button>
-      </div>
-
-      {/* Summary: 2 cards per row on mobile, 4 in a row on larger screens */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <SummaryCard
-          label="Total dues"
-          value={summary.totalAmount}
-          tone="total"
-        />
-
-        <SummaryCard
-          label="Total paid"
-          value={summary.totalPaid}
-          tone="paid"
-        />
-
-        <SummaryCard
-          label="Total remaining"
-          value={summary.totalRemaining}
-          tone="remaining"
-        />
-
-        <SummaryCard
-          label="Total records"
-          value={dues.length}
-          tone="count"
-        />
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-end bg-white border border-slate-200 rounded-xl p-4">
-        <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-medium text-slate-600 mb-1">
-            Search customer
-          </label>
-
-          <input
-            type="text"
-            placeholder="Name or contact..."
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
-            }
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">
-            Status
-          </label>
-
-          <select
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            value={status}
-            onChange={(e) =>
-              setStatus(e.target.value)
-            }
-          >
-            <option value="all">All</option>
-            <option value="paid">Paid</option>
-            <option value="partial">Partial</option>
-            <option value="unpaid">Unpaid</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">
-            From
-          </label>
-
-          <input
-            type="date"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            value={startDate}
-            onChange={(e) =>
-              setStartDate(e.target.value)
-            }
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">
-            To
-          </label>
-
-          <input
-            type="date"
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            value={endDate}
-            onChange={(e) =>
-              setEndDate(e.target.value)
-            }
-          />
-        </div>
-
-        {(search ||
-          status !== 'all' ||
-          startDate ||
-          endDate) && (
           <button
-            onClick={() => {
-              setSearch('');
-              setStatus('all');
-              setStartDate('');
-              setEndDate('');
-            }}
-            className="text-sm text-slate-500 hover:text-slate-800 underline pb-2"
+            onClick={() => setShowAddDue(true)}
+            className="shrink-0 rounded-lg bg-slate-900 text-white text-sm font-medium px-4 py-2 hover:bg-slate-800"
           >
-            Clear filters
+            + Add due
           </button>
-        )}
-      </div>
+        </div>
 
-      {/* Table */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
-            <tr>
-              <th className="text-left px-4 py-3">
-                Customer
-              </th>
+        {/* Summary: 2 cards per row on mobile, 4 in a row on larger screens */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+          <SummaryCard
+            label="Total dues"
+            value={summary.totalAmount}
+            tone="total"
+          />
 
-              <th className="text-left px-4 py-3">
-                Contact
-              </th>
+          <SummaryCard
+            label="Total paid"
+            value={summary.totalPaid}
+            tone="paid"
+          />
 
-              <th className="text-left px-4 py-3">
-                Date
-              </th>
+          <SummaryCard
+            label="Total remaining"
+            value={summary.totalRemaining}
+            tone="remaining"
+          />
 
-              <th className="text-right px-4 py-3">
-                Total
-              </th>
+          <SummaryCard
+            label="Total records"
+            value={dues.length}
+            tone="count"
+          />
+        </div>
 
-              <th className="text-right px-4 py-3">
-                Paid
-              </th>
+        {/* Filters */}
+        <div className="flex flex-wrap gap-3 items-end bg-white border border-slate-200 rounded-xl p-4">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Search customer
+            </label>
 
-              <th className="text-right px-4 py-3">
-                Remaining
-              </th>
+            <input
+              type="text"
+              placeholder="Name or contact..."
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={search}
+              onChange={(e) =>
+                setSearch(e.target.value)
+              }
+            />
+          </div>
 
-              <th className="text-left px-4 py-3">
-                Status
-              </th>
-            </tr>
-          </thead>
+          <div className="min-w-0">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Status
+            </label>
 
-          <tbody>
-            {loading ? (
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={status}
+              onChange={(e) =>
+                setStatus(e.target.value)
+              }
+            >
+              <option value="all">All</option>
+              <option value="paid">Paid</option>
+              <option value="partial">Partial</option>
+              <option value="unpaid">Unpaid</option>
+            </select>
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              From
+            </label>
+
+            <input
+              type="date"
+              className="w-full max-w-[150px] rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={startDate}
+              onChange={(e) =>
+                setStartDate(e.target.value)
+              }
+            />
+          </div>
+
+          <div className="min-w-0">
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              To
+            </label>
+
+            <input
+              type="date"
+              className="w-full max-w-[150px] rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={endDate}
+              onChange={(e) =>
+                setEndDate(e.target.value)
+              }
+            />
+          </div>
+
+          {(search ||
+            status !== 'all' ||
+            startDate ||
+            endDate) && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setStatus('all');
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="shrink-0 text-sm text-slate-500 hover:text-slate-800 underline pb-2"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        {/* Table — the only part of the page allowed to scroll horizontally */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
+            <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
               <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-slate-500"
-                >
-                  Loading...
-                </td>
+                <th className="text-left px-4 py-3">
+                  Customer
+                </th>
+
+                <th className="text-left px-4 py-3">
+                  Contact
+                </th>
+
+                <th className="text-left px-4 py-3">
+                  Date
+                </th>
+
+                <th className="text-right px-4 py-3">
+                  Total
+                </th>
+
+                <th className="text-right px-4 py-3">
+                  Paid
+                </th>
+
+                <th className="text-right px-4 py-3">
+                  Remaining
+                </th>
+
+                <th className="text-left px-4 py-3">
+                  Status
+                </th>
               </tr>
-            ) : error ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-rose-600"
-                >
-                  {error}
-                </td>
-              </tr>
-            ) : dues.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-slate-500"
-                >
-                  No dues found.
-                </td>
-              </tr>
-            ) : (
-              dues.map((due) => (
-                <tr
-                  key={due._id}
-                  onClick={() =>
-                    setSelectedDueId(due._id)
-                  }
-                  className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
-                >
-                  <td className="px-4 py-3 font-medium text-slate-900">
-                    {due.customer?.name || '—'}
-                  </td>
+            </thead>
 
-                  <td className="px-4 py-3 text-slate-600">
-                    {due.customer?.contact || '—'}
-                  </td>
-
-                  <td className="px-4 py-3 text-slate-600">
-                    {due.createdAt
-                      ? new Date(
-                          due.createdAt
-                        ).toLocaleDateString()
-                      : '—'}
-                  </td>
-
-                  <td className="px-4 py-3 text-right">
-                    {currency(due.totalAmount)}
-                  </td>
-
-                  <td className="px-4 py-3 text-right text-emerald-600">
-                    {currency(due.paid)}
-                  </td>
-
-                  <td className="px-4 py-3 text-right text-rose-600">
-                    {currency(due.remaining)}
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <StatusBadge due={due} />
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-8 text-center text-slate-500"
+                  >
+                    Loading...
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : error ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-8 text-center text-rose-600"
+                  >
+                    {error}
+                  </td>
+                </tr>
+              ) : dues.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-8 text-center text-slate-500"
+                  >
+                    No dues found.
+                  </td>
+                </tr>
+              ) : (
+                dues.map((due) => (
+                  <tr
+                    key={due._id}
+                    onClick={() =>
+                      setSelectedDueId(due._id)
+                    }
+                    className="border-t border-slate-100 hover:bg-slate-50 cursor-pointer"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {due.customer?.name || '—'}
+                    </td>
+
+                    <td className="px-4 py-3 text-slate-600">
+                      {due.customer?.contact || '—'}
+                    </td>
+
+                    <td className="px-4 py-3 text-slate-600">
+                      {due.createdAt
+                        ? new Date(
+                            due.createdAt
+                          ).toLocaleDateString()
+                        : '—'}
+                    </td>
+
+                    <td className="px-4 py-3 text-right">
+                      {currency(due.totalAmount)}
+                    </td>
+
+                    <td className="px-4 py-3 text-right text-emerald-600">
+                      {currency(due.paid)}
+                    </td>
+
+                    <td className="px-4 py-3 text-right text-rose-600">
+                      {currency(due.remaining)}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <StatusBadge due={due} />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {selectedDueId && (
+          <DueDetailModal
+            dueId={selectedDueId}
+            onClose={() =>
+              setSelectedDueId(null)
+            }
+            onUpdated={fetchDues}
+          />
+        )}
+
+        {showAddDue && (
+          <AddDueModal
+            onClose={() => setShowAddDue(false)}
+            onCreated={fetchDues}
+          />
+        )}
       </div>
-
-      {selectedDueId && (
-        <DueDetailModal
-          dueId={selectedDueId}
-          onClose={() =>
-            setSelectedDueId(null)
-          }
-          onUpdated={fetchDues}
-        />
-      )}
-
-      {showAddDue && (
-        <AddDueModal
-          onClose={() => setShowAddDue(false)}
-          onCreated={fetchDues}
-        />
-      )}
-    </div>
+    </SidebarLayout>
   );
 }
 
