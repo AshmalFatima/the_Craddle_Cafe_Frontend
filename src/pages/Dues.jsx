@@ -1046,6 +1046,39 @@ function RecordPaymentModal({
         </div>
 
         <div className="px-5 py-4 space-y-3">
+          {/* Product names — shown for context only. Payment is still
+              recorded as a single overall amount, not split per product. */}
+          {Array.isArray(due.products) && due.products.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p className="text-xs font-medium text-slate-500 mb-1.5">
+                Products in this due
+              </p>
+
+              <ul className="space-y-1">
+                {due.products.map((p, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center justify-between text-sm text-slate-700"
+                  >
+                    <span className="truncate pr-2">
+                      {p.product?.name || 'Product removed'}
+                      {p.product?.variantName && (
+                        <span className="text-slate-500">
+                          {' '}
+                          ({p.product.variantName})
+                        </span>
+                      )}
+                    </span>
+
+                    <span className="shrink-0 text-slate-500">
+                      × {p.quantity}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <p className="text-sm text-slate-600">
             Remaining balance:{' '}
             <span className="font-medium text-slate-900">
@@ -1333,6 +1366,13 @@ function CustomerDuesModal({
 }) {
   const [selectedDueId, setSelectedDueId] = useState(null);
 
+  // "Pay overall" — a single amount applied across this customer's dues,
+  // oldest remaining balance first. This sits alongside (not instead of)
+  // paying a single due separately by clicking on it in the table below.
+  const [overallAmount, setOverallAmount] = useState('');
+  const [payingOverall, setPayingOverall] = useState(false);
+  const [overallError, setOverallError] = useState('');
+
   const totals = dues.reduce(
     (acc, d) => {
       acc.totalAmount += d.totalAmount || 0;
@@ -1342,6 +1382,73 @@ function CustomerDuesModal({
     },
     { totalAmount: 0, paid: 0, remaining: 0 }
   );
+
+  const handleOverallPayment = async () => {
+    setOverallError('');
+
+    const value = Number(overallAmount);
+
+    if (!value || value <= 0) {
+      return setOverallError('Enter a valid amount');
+    }
+
+    if (value > totals.remaining) {
+      return setOverallError(
+        'Amount exceeds the total remaining across all dues'
+      );
+    }
+
+    setPayingOverall(true);
+
+    // Apply the payment to the oldest unpaid/partial dues first, spilling
+    // over into the next due once one is fully paid off.
+    const unpaidDues = dues
+      .filter((d) => d.remaining > 0)
+      .sort(
+        (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+      );
+
+    let remainingToApply = value;
+
+    try {
+      for (const due of unpaidDues) {
+        if (remainingToApply <= 0) break;
+
+        const amountForThisDue = Math.min(
+          remainingToApply,
+          due.remaining
+        );
+
+        const res = await fetch(
+          `${API_BASE}/dues/${due._id}/payment`,
+          {
+            method: 'PUT',
+            headers: authHeaders(),
+            body: JSON.stringify({ amount: amountForThisDue }),
+          }
+        );
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(
+            data.message || 'Could not record payment'
+          );
+        }
+
+        remainingToApply -= amountForThisDue;
+      }
+
+      setOverallAmount('');
+      onChanged();
+    } catch (err) {
+      setOverallError(
+        err.message || 'Could not record payment'
+      );
+    } finally {
+      setPayingOverall(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
@@ -1451,6 +1558,49 @@ function CustomerDuesModal({
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {totals.remaining > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
+              <p className="text-sm font-medium text-slate-700">
+                Pay overall
+              </p>
+
+              <p className="text-xs text-slate-500">
+                Applies to the oldest unpaid due(s) first, across all
+                of {customer.name}'s dues. To pay a single due
+                instead, click on it in the table above.
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={totals.remaining}
+                  placeholder={`Up to ${currency(totals.remaining)}`}
+                  className="flex-1 min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  value={overallAmount}
+                  onChange={(e) =>
+                    setOverallAmount(e.target.value)
+                  }
+                  disabled={payingOverall}
+                />
+
+                <button
+                  onClick={handleOverallPayment}
+                  disabled={payingOverall}
+                  className="shrink-0 rounded-lg bg-slate-900 text-white text-sm font-medium px-4 py-2 disabled:opacity-50"
+                >
+                  {payingOverall ? 'Paying...' : 'Pay'}
+                </button>
+              </div>
+
+              {overallError && (
+                <p className="text-sm text-rose-600">
+                  {overallError}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -1796,6 +1946,9 @@ function Dues() {
                 <th className="text-left px-4 py-3">
                   Customer
                 </th>
+                  <th className="text-right px-4 py-3">
+                  Date
+                </th>
 
                 <th className="text-left px-4 py-3">
                   Contact
@@ -1812,10 +1965,13 @@ function Dues() {
                 <th className="text-right px-4 py-3">
                   Remaining
                 </th>
+               
 
                 <th className="text-left px-4 py-3">
                   Status
                 </th>
+
+                
 
                 <th className="text-right px-4 py-3">
                   Actions
@@ -1860,6 +2016,11 @@ function Dues() {
                     <td className="px-4 py-3 font-medium text-slate-900">
                       {group.customer.name || '—'}
                     </td>
+                    <td className="px-4 py-3 text-right text-slate-600">
+                      {group.dues.length > 0 && group.dues[0].createdAt
+                        ? new Date(group.dues[0].createdAt).toLocaleDateString()
+                        : '—'}
+                    </td>
 
                     <td className="px-4 py-3 text-slate-600">
                       {group.customer.contact || '—'}
@@ -1876,6 +2037,8 @@ function Dues() {
                     <td className="px-4 py-3 text-right text-rose-600">
                       {currency(group.remaining)}
                     </td>
+                    
+                 
 
                     <td className="px-4 py-3">
                       {/* Static badge — reflects aggregate status only,

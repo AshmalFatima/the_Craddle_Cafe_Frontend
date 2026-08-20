@@ -9,6 +9,7 @@ const TYPES = {
   CASH_IN: "Cash In",
   CASH_OUT: "Cash Out",
 };
+const PAYMENT_METHODS = ["Cash", "Card", "Online"];
 
 const EMPTY_FILTERS = {
   description: "",
@@ -22,6 +23,7 @@ const EMPTY_FORM = {
   amount: "",
   type: "Cash In",
   note: "",
+  paymentMethod: "Cash",
 };
 
 function authHeaders() {
@@ -228,6 +230,7 @@ export default function Expense() {
   setForm({
     amount: exp.amount ?? "",
     type: exp.type || "Cash In",
+    paymentMethod: exp.paymentMethod || "Cash",
     note: exp.description || "",
   });
   setFormError("");
@@ -384,6 +387,7 @@ const handleSubmitExpense = async (e) => {
           amount: form.amount,
           type: form.type,
           description: form.note,
+          paymentMethod: form.paymentMethod,
         }),
       }
     );
@@ -861,6 +865,9 @@ const handleSubmitExpense = async (e) => {
                     <th className="px-4 py-3">
                       Date
                     </th>
+                    <th className="px-4 py-3">
+                    Payment Method
+                    </th>
 
                     <th className="px-4 py-3">
                       Added by
@@ -943,6 +950,11 @@ const handleSubmitExpense = async (e) => {
                               exp.expenseDate
                             )}
                           </td>
+                           <td className="max-w-xs px-4 py-3 text-slate-600">
+  <span className="inline-block rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-700">
+    {exp.paymentMethod || "—"}
+  </span>
+</td>
 
                           <td className="px-4 py-3 text-slate-500">
                             {exp.addedBy?.name || "—"}
@@ -1059,7 +1071,35 @@ const handleSubmitExpense = async (e) => {
                     )}
                   </div>
                 </div>
+ <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Payment Method
+                  </label>
 
+                  <div className="grid grid-cols-3 gap-2">
+                    {PAYMENT_METHODS.map(
+                      (method) => (
+                        <button
+                          type="button"
+                          key={method}
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              paymentMethod: method,
+                            }))
+                          }
+                          className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                            form.paymentMethod === method
+                              ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                          }`}
+                        >
+                          {method}
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
                     Note
