@@ -26,6 +26,11 @@ const EMPTY_FORM = {
   paymentMethod: "Cash",
 };
 
+const EMPTY_BREAKDOWN = {
+  cashIn: { online: 0, cash: 0 },
+  cashOut: { online: 0, cash: 0 },
+};
+
 function authHeaders() {
   const token = localStorage.getItem("token");
 
@@ -160,6 +165,11 @@ export default function Expense() {
     cashOut: 0,
     balance: 0,
   });
+
+  // Online vs Cash split for each type — driven off the same date range
+  // as `totals` (not the type filter), so both summary cards always show
+  // their full Online/Cash split regardless of which card is selected.
+  const [paymentBreakdown, setPaymentBreakdown] = useState(EMPTY_BREAKDOWN);
 
   const [activeFilter, setActiveFilter] = useState(TYPES.ALL);
 
@@ -310,12 +320,76 @@ export default function Expense() {
   }, [filters.startDate, filters.endDate]);
 
   // ------------------------------------------------------------
+  // Load Online / Cash split (per type)
+  //
+  // Uses the same date range as `totals` but ignores the active
+  // Cash In / Cash Out card filter and the other text/amount filters,
+  // so the split shown on each card always reflects ALL of that
+  // type's entries in the date range — not just what's currently
+  // showing in the table below.
+  // ------------------------------------------------------------
+
+  const loadPaymentBreakdown = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+
+      if (filters.startDate) {
+        params.set("startDate", filters.startDate);
+      }
+
+      if (filters.endDate) {
+        params.set("endDate", filters.endDate);
+      }
+
+      const res = await fetch(
+        `${API_BASE}/search?${params.toString()}`,
+        {
+          headers: authHeaders(),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.message || "Failed to load payment breakdown"
+        );
+      }
+
+      const list = Array.isArray(data) ? data : [];
+
+      const next = {
+        cashIn: { online: 0, cash: 0 },
+        cashOut: { online: 0, cash: 0 },
+      };
+
+      list.forEach((exp) => {
+        const bucket =
+          exp.type === "Cash In" ? "cashIn" : "cashOut";
+
+        // Schema only allows "Cash" or "Online" — anything else
+        // (e.g. a legacy "Card" entry) is folded into Cash so the
+        // two numbers always add up to the card's total.
+        const method =
+          exp.paymentMethod === "Online" ? "online" : "cash";
+
+        next[bucket][method] += Number(exp.amount) || 0;
+      });
+
+      setPaymentBreakdown(next);
+    } catch {
+      // Breakdown is supplementary.
+    }
+  }, [filters.startDate, filters.endDate]);
+
+  // ------------------------------------------------------------
   // Initial loading / filter change
   // ------------------------------------------------------------
 
   useEffect(() => {
     loadExpenses();
     loadTotals();
+    loadPaymentBreakdown();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFilter]);
@@ -329,6 +403,7 @@ export default function Expense() {
 
     loadExpenses();
     loadTotals();
+    loadPaymentBreakdown();
   };
 
   // ------------------------------------------------------------
@@ -341,6 +416,7 @@ export default function Expense() {
     setTimeout(() => {
       loadExpenses();
       loadTotals();
+      loadPaymentBreakdown();
     }, 0);
   };
 
@@ -407,6 +483,7 @@ const handleSubmitExpense = async (e) => {
 
     loadExpenses();
     loadTotals();
+    loadPaymentBreakdown();
   } catch (err) {
     setFormError(err.message || "Something went wrong");
   } finally {
@@ -442,6 +519,7 @@ const handleSubmitExpense = async (e) => {
 
       loadExpenses();
       loadTotals();
+      loadPaymentBreakdown();
     } catch (err) {
       setError(
         err.message || "Failed to delete expense"
@@ -470,6 +548,7 @@ const handleSubmitExpense = async (e) => {
       label: "Cash In",
       value: formatCurrency(totals.cashIn),
       sub: `${totals.cashInCount ?? 0} entries`,
+      breakdown: paymentBreakdown.cashIn,
       accent: "emerald",
       clickable: true,
     },
@@ -478,6 +557,7 @@ const handleSubmitExpense = async (e) => {
       label: "Cash Out",
       value: formatCurrency(totals.cashOut),
       sub: `${totals.cashOutCount ?? 0} entries`,
+      breakdown: paymentBreakdown.cashOut,
       accent: "rose",
       clickable: true,
     },
@@ -653,6 +733,30 @@ const handleSubmitExpense = async (e) => {
                   <div className="mt-1 text-xs text-slate-400">
                     {card.sub}
                   </div>
+
+                  {card.breakdown && (
+                    <div className="mt-2 space-y-0.5 border-t border-slate-100 pt-2 text-[11px] leading-tight text-slate-500">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          Online
+                        </span>
+                        <span className="font-medium text-slate-600">
+                          {formatCurrency(card.breakdown.online)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                          Cash
+                        </span>
+                        <span className="font-medium text-slate-600">
+                          {formatCurrency(card.breakdown.cash)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </Wrapper>
               );
             })}
