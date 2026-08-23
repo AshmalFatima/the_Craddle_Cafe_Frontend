@@ -539,6 +539,14 @@ function ProductLines({ lines, onChange }) {
   const [productQuery, setProductQuery] = useState('');
   const [productResults, setProductResults] = useState([]);
 
+  // Manual/custom item — for things like a small bag of candies that
+  // aren't in the Product catalog. No `product` id, just a name + price.
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
+  const [manualQty, setManualQty] = useState(null);
+  const [manualError, setManualError] = useState('');
+
   useEffect(() => {
     if (!productQuery.trim()) {
       setProductResults([]);
@@ -611,7 +619,7 @@ function ProductLines({ lines, onChange }) {
         product: product._id,
         name: product.name,
         variant: product.variantName,
-        quantity: 1,
+        quantity: null, // user must fill in qty
         price: unitPrice,
       },
     ]);
@@ -620,10 +628,72 @@ function ProductLines({ lines, onChange }) {
     setProductResults([]);
   };
 
+  const addManualLine = () => {
+    setManualError('');
+
+    const name = manualName.trim();
+    const price = Number(manualPrice);
+    const qty = Math.max(1, Number(manualQty) || 1);
+
+    if (!name) {
+      return setManualError('Enter an item name');
+    }
+
+    if (!manualPrice || Number.isNaN(price) || price <= 0) {
+      return setManualError('Enter a valid price');
+    }
+
+    // No `product` id here — this line is identified by its name alone,
+    // which the backend accepts for custom/manual items.
+    onChange([
+      ...lines,
+      {
+        product: null,
+        name,
+        quantity: qty,
+        price,
+        manual: true,
+      },
+    ]);
+
+    setManualName('');
+    setManualPrice('');
+    setManualQty(null);
+    setShowManualForm(false);
+  };
+
   const updateQuantity = (index, value) => {
     const next = [...lines];
 
-    const qty = Math.max(1, Number(value) || 1);
+    // Never allow the quantity to drop below 0.
+    const qty = Math.max(0, Number(value) || 0);
+
+    next[index] = {
+      ...next[index],
+      quantity: qty,
+    };
+
+    onChange(next);
+  };
+
+  const incrementQuantity = (index) => {
+    const next = [...lines];
+
+    const qty = Math.max(0, Number(next[index].quantity) || 0) + 1;
+
+    next[index] = {
+      ...next[index],
+      quantity: qty,
+    };
+
+    onChange(next);
+  };
+
+  const decrementQuantity = (index) => {
+    const next = [...lines];
+
+    // Floor at 0 — never go negative.
+    const qty = Math.max(0, (Number(next[index].quantity) || 0) - 1);
 
     next[index] = {
       ...next[index],
@@ -709,6 +779,94 @@ function ProductLines({ lines, onChange }) {
         )}
       </div>
 
+      {/* Custom/manual item — for things not in the catalog (candies,
+          one-off small items) that shouldn't be forced into a Product
+          record just to appear on a due. */}
+      <div className="mt-2">
+        {!showManualForm ? (
+          <button
+            type="button"
+            onClick={() => {
+              setShowManualForm(true);
+              setManualError('');
+            }}
+            className="text-xs font-medium text-slate-500 hover:text-slate-800 underline"
+          >
+            + Add custom item (not in product list)
+          </button>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-300 p-2.5 space-y-2">
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex-1 min-w-[140px]">
+                <label className="block text-[11px] text-slate-500 mb-1">
+                  Item name
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="e.g. Candies"
+                  className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                />
+              </div>
+
+              <div className="w-24">
+                <label className="block text-[11px] text-slate-500 mb-1">
+                  Price
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                  value={manualPrice}
+                  onChange={(e) => setManualPrice(e.target.value)}
+                />
+              </div>
+
+              <div className="w-16">
+                <label className="block text-[11px] text-slate-500 mb-1">
+                  Qty
+                </label>
+
+                <input
+                  type="number"
+                  min="1"
+                  className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                  value={manualQty}
+                  onChange={(e) => setManualQty(e.target.value)}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={addManualLine}
+                className="shrink-0 rounded-lg bg-slate-900 text-white text-xs font-medium px-3 py-1.5 hover:bg-slate-800"
+              >
+                Add
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowManualForm(false);
+                  setManualError('');
+                }}
+                className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {manualError && (
+              <p className="text-xs text-rose-600">{manualError}</p>
+            )}
+          </div>
+        )}
+      </div>
+
       {lines.length > 0 && (
         <div className="mt-3 border border-slate-200 rounded-lg overflow-x-auto">
           <table className="w-full text-sm min-w-[480px]">
@@ -749,18 +907,43 @@ function ProductLines({ lines, onChange }) {
                         ({l.variantName || l.variant   })
                       </span>
                     )}
+
+                    {l.manual && (
+                      <span className="ml-1.5 text-[10px] font-medium text-amber-600">
+                        (custom)
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min="1"
-                      className="w-16 text-right rounded border border-slate-300 px-1.5 py-1"
-                      value={l.quantity}
-                      onChange={(e) =>
-                        updateQuantity(i, e.target.value)
-                      }
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => decrementQuantity(i)}
+                        disabled={!l.quantity}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-300 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                      >
+                        −
+                      </button>
+
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-12 text-right rounded border border-slate-300 px-1 py-1"
+                        value={l.quantity ?? ''}
+                        onChange={(e) =>
+                          updateQuantity(i, e.target.value)
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => incrementQuantity(i)}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-300 text-slate-600 hover:bg-slate-100"
+                      >
+                        +
+                      </button>
+                    </div>
                   </td>
 
                   <td className="px-3 py-2 text-right text-slate-600">
@@ -852,11 +1035,11 @@ function AddDueModal({ onClose, onCreated, presetCustomer = null }) {
         headers: authHeaders(),
         body: JSON.stringify({
           customer: customer._id,
-          products: lines.map((l) => ({
-            product: l.product,
-            quantity: l.quantity,
-            price: l.price,
-          })),
+          products: lines.map((l) =>
+            l.manual
+              ? { name: l.name, quantity: l.quantity, price: l.price }
+              : { product: l.product, quantity: l.quantity, price: l.price }
+          ),
           paid: paidValue,
         }),
       });
@@ -1061,11 +1244,16 @@ function RecordPaymentModal({
                     className="flex items-center justify-between text-sm text-slate-700"
                   >
                     <span className="truncate pr-2">
-                      {p.product?.name || 'Product removed'}
+                      {p.product?.name || p.name || 'Product removed'}
                       {p.product?.variantName && (
                         <span className="text-slate-500">
                           {' '}
                           ({p.product.variantName})
+                        </span>
+                      )}
+                      {!p.product && p.name && (
+                        <span className="ml-1 text-[10px] font-medium text-amber-600">
+                          (custom)
                         </span>
                       )}
                     </span>
@@ -1258,12 +1446,19 @@ function DueDetailModal({
                       >
                         <td className="px-3 py-2">
                           {p.product?.name ||
+                            p.name ||
                             'Product removed'}
 
                           {p.product?.variantName && (
                             <span className="text-slate-500">
                               {' '}
                               ({p.product.variantName})
+                            </span>
+                          )}
+
+                          {!p.product && p.name && (
+                            <span className="ml-1.5 text-[10px] font-medium text-amber-600">
+                              (custom)
                             </span>
                           )}
                         </td>
