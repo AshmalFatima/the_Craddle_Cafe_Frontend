@@ -544,7 +544,7 @@ function ProductLines({ lines, onChange }) {
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualPrice, setManualPrice] = useState('');
-  const [manualQty, setManualQty] = useState(null);
+  const [manualQty, setManualQty] = useState(1);
   const [manualError, setManualError] = useState('');
 
   useEffect(() => {
@@ -619,7 +619,7 @@ function ProductLines({ lines, onChange }) {
         product: product._id,
         name: product.name,
         variant: product.variantName,
-        quantity: null, // user must fill in qty
+        quantity: 1, // user must fill in qty
         price: unitPrice,
       },
     ]);
@@ -658,7 +658,7 @@ function ProductLines({ lines, onChange }) {
 
     setManualName('');
     setManualPrice('');
-    setManualQty(null);
+    setManualQty(1);
     setShowManualForm(false);
   };
 
