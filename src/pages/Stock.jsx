@@ -27,7 +27,16 @@ const EMPTY_FORM = {
   petStock: "",
   unitStock: "",
   note: "",
+  fundingSource: "New Amount",
+  paymentMethod: "Cash",
 };
+
+const FUNDING_SOURCES = [
+  { value: "New Amount", hint: "Fresh cash / new investment" },
+  { value: "Reinvestment", hint: "Recycled from existing profit" },
+];
+
+const PAYMENT_METHODS = ["Cash", "Online"];
 
 // Shared styling for every filter input/select: a visible border, generous
 // padding, and a clear focus state — matches the field style used on the
@@ -218,6 +227,13 @@ function StockModal({
     }));
   };
 
+  // Cost preview for the funding-source note, mirrors StockManageModal:
+  // units = pets * itemsPerPet, cost = units * unitPrice.
+  const itemsPerPet = selectedProduct?.itemsPerPet || 1;
+  const enteredPets = Number(form.petStock) || 0;
+  const unitsForQty = enteredPets * itemsPerPet;
+  const costForQty = unitsForQty * (selectedProduct?.unitPrice || 0);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1C2B33]/40 px-4">
       <div className="w-full max-w-md rounded-2xl border border-[#E4E0D6] bg-white p-6 shadow-2xl">
@@ -349,6 +365,83 @@ function StockModal({
               <p className="mt-1 text-xs text-[#8A969C]">
                 Only whole units are allowed for Stock Out.
               </p>
+            </div>
+          )}
+
+          {/* Funding source & payment method — only relevant when adding
+              stock (a cost), same pattern as StockManageModal. */}
+          {isIn && (
+            <div className="rounded-xl border border-[#E4E0D6] bg-[#F7F5F0] p-4">
+              <p className="text-xs font-bold text-[#1C2B33]">
+                Funding source
+                <span className="ml-1 text-rose-500">*</span>
+              </p>
+
+              <p className="mb-2 mt-1 text-xs text-[#5C6B73]">
+                Logs automatically as a{" "}
+                <span className="font-semibold text-[#1C2B33]">
+                  {formatCurrency(costForQty)}
+                </span>{" "}
+                expense.
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                {FUNDING_SOURCES.map((source) => {
+                  const selected =
+                    form.fundingSource === source.value;
+
+                  return (
+                    <button
+                      type="button"
+                      key={source.value}
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          fundingSource: source.value,
+                        }))
+                      }
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                        selected
+                          ? "border-[#2F6F63] bg-[#2F6F63]/10 text-[#2F6F63]"
+                          : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-[#2F6F63] hover:bg-[#2F6F63]/10 hover:text-[#2F6F63]"
+                      }`}
+                      title={source.hint}
+                    >
+                      {source.value}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="mb-1.5 mt-3 text-xs font-bold text-[#1C2B33]">
+                Payment method
+              </p>
+
+              <div className="flex gap-2">
+                {PAYMENT_METHODS.map((method) => {
+                  const selected = form.paymentMethod === method;
+
+                  return (
+                    <button
+                      type="button"
+                      key={method}
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          paymentMethod: method,
+                        }))
+                      }
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                        selected
+                          ? "border-[#2F6F63] bg-[#2F6F63]/10 text-[#2F6F63]"
+                          : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-[#2F6F63] hover:bg-[#2F6F63]/10 hover:text-[#2F6F63]"
+                      }`}
+                    >
+                      {method}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -679,12 +772,26 @@ export default function Stock() {
         return;
       }
 
+      if (!form.fundingSource) {
+        setFormError(
+          "Select where this stock's cost is being funded from."
+        );
+        return;
+      }
+
       url = `${API_BASE}/in`;
 
       payload = {
         product: form.product,
         petStock: pets,
         note: form.note.trim(),
+        // The backend's /in route logs the accompanying expense itself —
+        // these just tell it how to classify that expense.
+        type:
+          form.fundingSource === "Reinvestment"
+            ? "Reinvestment"
+            : "Cash Out",
+        paymentMethod: form.paymentMethod,
       };
     } else {
       const units = Number(form.unitStock);
