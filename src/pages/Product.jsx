@@ -279,19 +279,16 @@ export default function Product() {
           <SummaryCard
             label="Total cost"
             value={formatCurrency(totals.totalCost)}
-            icon="cost"
           />
 
           <SummaryCard
             label="Total selling"
             value={formatCurrency(totals.totalSelling)}
-            icon="selling"
           />
 
           <SummaryCard
             label="Total profit"
             value={formatCurrency(totals.totalProfit)}
-            icon="profit"
             valueClassName={
               totals.totalProfit < 0
                 ? "text-rose-600"
@@ -907,6 +904,7 @@ function SummaryCard({ label, value, icon, className = "", valueClassName = "" }
           </p>
         </div>
 
+        {icon && (
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 sm:h-10 sm:w-10">
           {icon === "box" && (
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:h-[19px] sm:w-[19px]">
@@ -955,6 +953,7 @@ function SummaryCard({ label, value, icon, className = "", valueClassName = "" }
             </svg>
           )}
         </div>
+        )}
       </div>
     </div>
   );
