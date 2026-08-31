@@ -8,6 +8,7 @@ import Expense from "./pages/Expense";
 import Category from "./pages/Category";
 import Stock from "./pages/Stock";
 import Dashboard2 from "./pages/Dashboard2";
+import ReturnProduct from "./pages/ReturnProduct";
 import Dues from "./pages/Dues";
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
         <Route path="/stock" element={<Stock />} />
         <Route path="/dashboard" element={<Dashboard2 />} />
         <Route path="/dues" element={<Dues />} />
+        <Route path="/return-product" element={<ReturnProduct />} />
       </Routes>
     </>
   );

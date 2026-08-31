@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+// return product icon
 import {
   Tag,
   Package,
@@ -8,7 +9,7 @@ import {
   ShoppingCart,
   LogOut,
   LayoutDashboard,
-  
+  MinusSquare,
   Menu,
   X,
 } from "lucide-react";
@@ -50,6 +51,12 @@ const NAV_ITEMS = [
     label: "Dues",
     icon: Wallet,
     href: "/dues",
+  },
+  {
+    key: "return-product",
+    label: "Return Product",
+    icon: MinusSquare,
+    href: "/return-product",
   }
 ];
 

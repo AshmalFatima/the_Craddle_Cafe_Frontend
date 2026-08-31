@@ -1,8 +1,14 @@
-
 import React, { useEffect, useMemo, useState } from "react";
 import Modal, { formatCurrency, formatNumber } from "./Modal";
 import ConfirmDialog from "./ConfirmDialog";
 import { inventoryApi } from "../../src/api/inventoryApi";
+
+const FUNDING_SOURCES = [
+  { value: "New Amount", hint: "Fresh cash / new investment" },
+  { value: "Reinvestment", hint: "Recycled from existing profit" },
+];
+
+const PAYMENT_METHODS = ["Cash", "Online"];
 
 export default function StockManageModal({ open, product, onClose, onStockChanged }) {
   const [history, setHistory] = useState([]);
@@ -17,6 +23,8 @@ export default function StockManageModal({ open, product, onClose, onStockChange
   const [movement, setMovement] = useState(null);
   const [qty, setQty] = useState("");
   const [note, setNote] = useState("");
+  const [fundingSource, setFundingSource] = useState("New Amount");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -27,6 +35,8 @@ export default function StockManageModal({ open, product, onClose, onStockChange
       setMovement(null);
       setQty("");
       setNote("");
+      setFundingSource("New Amount");
+      setPaymentMethod("Cash");
       setError("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,10 +94,15 @@ export default function StockManageModal({ open, product, onClose, onStockChange
       ? enteredQty / itemsPerPet
       : enteredQty;
 
+  // Only meaningful for "in" — this is what gets logged as an expense.
+  const costForQty = unitsForQty * product.unitPrice;
+
   function openMovement(direction) {
     setMovement({ direction });
     setQty("");
     setNote("");
+    setFundingSource("New Amount");
+    setPaymentMethod("Cash");
     setError("");
   }
 
@@ -115,6 +130,11 @@ export default function StockManageModal({ open, product, onClose, onStockChange
       return;
     }
 
+    if (movement.direction === "in" && !fundingSource) {
+      setError("Select where this stock's cost is being funded from.");
+      return;
+    }
+
     setError("");
     setConfirming(true);
   }
@@ -129,6 +149,13 @@ export default function StockManageModal({ open, product, onClose, onStockChange
               product: product._id,
               petStock: enteredQty,
               note,
+              // The backend's /in route logs the accompanying expense itself —
+              // these just tell it how to classify that expense.
+              type:
+                fundingSource === "Reinvestment"
+                  ? "Reinvestment"
+                  : "Cash Out",
+              paymentMethod,
             }
           : {
               product: product._id,
@@ -147,6 +174,8 @@ export default function StockManageModal({ open, product, onClose, onStockChange
       setMovement(null);
       setQty("");
       setNote("");
+      setFundingSource("New Amount");
+      setPaymentMethod("Cash");
 
       loadHistory();
     } catch (e) {
@@ -334,6 +363,74 @@ export default function StockManageModal({ open, product, onClose, onStockChange
               </label>
             </div>
 
+            {/* Funding source — only relevant when adding stock (a cost) */}
+            {movement.direction === "in" && (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                <p className="text-xs font-bold text-slate-700">
+                  Funding source
+                  <span className="ml-1 text-rose-500">*</span>
+                </p>
+
+                <p className="mb-2 mt-1 text-xs text-slate-500">
+                  Logs automatically as a{" "}
+                  <span className="font-semibold text-slate-700">
+                    {formatCurrency(costForQty)}
+                  </span>{" "}
+                  expense.
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  {FUNDING_SOURCES.map((source) => {
+                    const selected =
+                      fundingSource === source.value;
+
+                    return (
+                      <button
+                        type="button"
+                        key={source.value}
+                        onClick={() =>
+                          setFundingSource(source.value)
+                        }
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                          selected
+                            ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                        }`}
+                        title={source.hint}
+                      >
+                        {source.value}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="mb-1.5 mt-3 text-xs font-bold text-slate-700">
+                  Payment method
+                </p>
+
+                <div className="flex gap-2">
+                  {PAYMENT_METHODS.map((method) => {
+                    const selected = paymentMethod === method;
+
+                    return (
+                      <button
+                        type="button"
+                        key={method}
+                        onClick={() => setPaymentMethod(method)}
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                          selected
+                            ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                            : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                        }`}
+                      >
+                        {method}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {error && (
               <p className="mt-3 text-sm font-medium text-rose-600">
                 {error}
@@ -347,6 +444,8 @@ export default function StockManageModal({ open, product, onClose, onStockChange
                   setMovement(null);
                   setQty("");
                   setNote("");
+                  setFundingSource("New Amount");
+                  setPaymentMethod("Cash");
                   setError("");
                 }}
                 className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
@@ -561,7 +660,15 @@ export default function StockManageModal({ open, product, onClose, onStockChange
           petsForQty
         )} pets/cartons) ${
           movement?.direction === "in" ? "to" : "from"
-        } ${product.name} — ${product.variantName}.`}
+        } ${product.name} — ${product.variantName}.${
+          movement?.direction === "in"
+            ? ` Logs a ${formatCurrency(costForQty)} ${
+                fundingSource === "Reinvestment"
+                  ? "reinvestment"
+                  : "cash out"
+              } expense (${paymentMethod}).`
+            : ""
+        }`}
         confirmLabel={
           movement?.direction === "in"
             ? "Add stock"
@@ -602,4 +709,3 @@ function Stat({ label, value, tone }) {
     </div>
   );
 }
-

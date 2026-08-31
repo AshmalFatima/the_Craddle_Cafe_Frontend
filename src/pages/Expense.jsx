@@ -8,8 +8,9 @@ const TYPES = {
   ALL: "all",
   CASH_IN: "Cash In",
   CASH_OUT: "Cash Out",
+  REINVEST: "Reinvestment",
 };
-const PAYMENT_METHODS = ["Cash", "Card", "Online"];
+const PAYMENT_METHODS = ["Cash", "Online"];
 
 const EMPTY_FILTERS = {
   description: "",
@@ -29,6 +30,7 @@ const EMPTY_FORM = {
 const EMPTY_BREAKDOWN = {
   cashIn: { online: 0, cash: 0 },
   cashOut: { online: 0, cash: 0 },
+  reinvest: { online: 0, cash: 0 },
 };
 
 function authHeaders() {
@@ -167,8 +169,10 @@ export default function Expense() {
   });
 
   // Online vs Cash split for each type — driven off the same date range
-  // as `totals` (not the type filter), so both summary cards always show
+  // as `totals` (not the type filter), so all summary cards always show
   // their full Online/Cash split regardless of which card is selected.
+  // Also doubles as the source of the Reinvested total, since the
+  // /total endpoint doesn't necessarily know about that bucket.
   const [paymentBreakdown, setPaymentBreakdown] = useState(EMPTY_BREAKDOWN);
 
   const [activeFilter, setActiveFilter] = useState(TYPES.ALL);
@@ -320,13 +324,13 @@ export default function Expense() {
   }, [filters.startDate, filters.endDate]);
 
   // ------------------------------------------------------------
-  // Load Online / Cash split (per type)
+  // Load Online / Cash split (per type), plus the Reinvested total
   //
   // Uses the same date range as `totals` but ignores the active
-  // Cash In / Cash Out card filter and the other text/amount filters,
-  // so the split shown on each card always reflects ALL of that
-  // type's entries in the date range — not just what's currently
-  // showing in the table below.
+  // Cash In / Cash Out / Reinvestment card filter and the other
+  // text/amount filters, so the split shown on each card always
+  // reflects ALL of that type's entries in the date range — not
+  // just what's currently showing in the table below.
   // ------------------------------------------------------------
 
   const loadPaymentBreakdown = useCallback(async () => {
@@ -361,11 +365,16 @@ export default function Expense() {
       const next = {
         cashIn: { online: 0, cash: 0 },
         cashOut: { online: 0, cash: 0 },
+        reinvest: { online: 0, cash: 0 },
       };
 
       list.forEach((exp) => {
         const bucket =
-          exp.type === "Cash In" ? "cashIn" : "cashOut";
+          exp.type === "Cash In"
+            ? "cashIn"
+            : exp.type === "Reinvestment"
+            ? "reinvest"
+            : "cashOut";
 
         // Schema only allows "Cash" or "Online" — anything else
         // (e.g. a legacy "Card" entry) is folded into Cash so the
@@ -460,6 +469,12 @@ const handleSubmitExpense = async (e) => {
         method: isEditing ? "PUT" : "POST",
         headers: authHeaders(),
         body: JSON.stringify({
+          // The schema requires a separate `title` from `description` —
+          // fall back to the type so manual entries never fail validation
+          // just because the note was left blank.
+          title: form.note.trim()
+            ? form.note.trim().slice(0, 60)
+            : form.type,
           amount: form.amount,
           type: form.type,
           description: form.note,
@@ -531,6 +546,17 @@ const handleSubmitExpense = async (e) => {
   // Summary cards
   // ------------------------------------------------------------
 
+  const reinvestTotal =
+    (paymentBreakdown.reinvest.online || 0) +
+    (paymentBreakdown.reinvest.cash || 0);
+
+  // Cash In minus Cash Out from the backend, then netted against
+  // reinvestment: money recycled into stock isn't new cash out, but it
+  // also isn't sitting in the till, so it comes off the Balance shown here.
+  const rawBalance =
+    totals.balance ?? (totals.cashIn || 0) - (totals.cashOut || 0);
+  const netBalance = rawBalance - reinvestTotal;
+
   const cardMeta = [
     {
       key: TYPES.ALL,
@@ -562,13 +588,24 @@ const handleSubmitExpense = async (e) => {
       clickable: true,
     },
     {
+      key: TYPES.REINVEST,
+      label: "Reinvested",
+      value: formatCurrency(reinvestTotal),
+      sub: "Recycled into stock",
+      breakdown: paymentBreakdown.reinvest,
+      accent: "amber",
+      clickable: true,
+    },
+    {
       key: "balance",
       label: "Balance",
-      value: formatCurrency(
-        totals.balance ??
-          (totals.cashIn || 0) - (totals.cashOut || 0)
-      ),
-      sub: "Net position",
+      value: formatCurrency(netBalance),
+      sub: "Net position after reinvestment",
+      formula: `${formatCurrency(
+        totals.cashIn || 0
+      )} − ${formatCurrency(totals.cashOut || 0)} − ${formatCurrency(
+        reinvestTotal
+      )}`,
       accent: "indigo",
       clickable: false,
     },
@@ -597,6 +634,14 @@ const handleSubmitExpense = async (e) => {
       text: "text-rose-700",
       dot: "bg-rose-600",
       bg: "bg-rose-50",
+    },
+
+    amber: {
+      ring: "ring-amber-600",
+      border: "border-amber-200",
+      text: "text-amber-700",
+      dot: "bg-amber-600",
+      bg: "bg-amber-50",
     },
 
     indigo: {
@@ -664,7 +709,7 @@ const handleSubmitExpense = async (e) => {
               </h1>
 
               <p className="mt-0.5 text-sm text-slate-500">
-                Track cash in and cash out, in one place.
+                Track cash in, cash out, and reinvested stock spend — in one place.
               </p>
             </div>
 
@@ -683,10 +728,10 @@ const handleSubmitExpense = async (e) => {
 
           {/* ==================================================
               SUMMARY CARDS
-              2 columns on mobile (2x2 grid), 4 columns from sm up
+              2 columns on mobile (grid wraps), more from sm up
           ================================================== */}
 
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-4">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {cardMeta.map((card) => {
               const a = accentClasses[card.accent];
 
@@ -733,6 +778,12 @@ const handleSubmitExpense = async (e) => {
                   <div className="mt-1 text-xs text-slate-400">
                     {card.sub}
                   </div>
+
+                  {card.formula && (
+                    <div className="mt-1 font-mono text-[11px] leading-tight text-slate-400">
+                      {card.formula}
+                    </div>
+                  )}
 
                   {card.breakdown && (
                     <div className="mt-2 space-y-0.5 border-t border-slate-100 pt-2 text-[11px] leading-tight text-slate-500">
@@ -988,7 +1039,7 @@ const handleSubmitExpense = async (e) => {
                   {loading && (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-4 py-8 text-center text-slate-400"
                       >
                         Loading expenses…
@@ -1000,7 +1051,7 @@ const handleSubmitExpense = async (e) => {
                     expenses.length === 0 && (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="px-4 py-8 text-center text-slate-400"
                         >
                           No expenses match your filters yet.
@@ -1010,36 +1061,42 @@ const handleSubmitExpense = async (e) => {
 
                   {!loading &&
                     expenses.map((exp) => {
-                      const isCashIn =
-                        exp.type === "Cash In";
+                      const isCashIn = exp.type === "Cash In";
+                      const isReinvest = exp.type === "Reinvestment";
+
+                      const badgeClass = isCashIn
+                        ? "bg-emerald-50 text-emerald-700"
+                        : isReinvest
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-rose-50 text-rose-700";
+
+                      const borderClass = isCashIn
+                        ? "border-l-emerald-500"
+                        : isReinvest
+                        ? "border-l-amber-500"
+                        : "border-l-rose-500";
+
+                      const amountClass = isCashIn
+                        ? "text-emerald-700"
+                        : isReinvest
+                        ? "text-amber-700"
+                        : "text-rose-700";
 
                       return (
                         <tr
                           key={exp._id}
-                          className={`border-l-4 ${
-                            isCashIn
-                              ? "border-l-emerald-500"
-                              : "border-l-rose-500"
-                          }`}
+                          className={`border-l-4 ${borderClass}`}
                         >
                           <td className="px-4 py-3">
                             <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                isCashIn
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-rose-50 text-rose-700"
-                              }`}
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}
                             >
                               {exp.type}
                             </span>
                           </td>
 
                           <td
-                            className={`px-4 py-3 font-medium ${
-                              isCashIn
-                                ? "text-emerald-700"
-                                : "text-rose-700"
-                            }`}
+                            className={`px-4 py-3 font-medium ${amountClass}`}
                           >
                             {isCashIn ? "+" : "–"}{" "}
                             {formatCurrency(exp.amount)}
@@ -1065,7 +1122,6 @@ const handleSubmitExpense = async (e) => {
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                          <td className="px-4 py-3 text-right">
   <div className="flex items-center justify-end gap-1">
     <button
       onClick={() => handleEditClick(exp)}
@@ -1084,8 +1140,6 @@ const handleSubmitExpense = async (e) => {
     </button>
   </div>
 </td>
-                       
-                          </td>
                         </tr>
                       );
                     })}
@@ -1149,8 +1203,8 @@ const handleSubmitExpense = async (e) => {
                     Type
                   </label>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    {["Cash In", "Cash Out"].map(
+                  <div className="grid grid-cols-3 gap-2">
+                    {["Cash In", "Cash Out", "Reinvestment"].map(
                       (type) => (
                         <button
                           type="button"
@@ -1161,10 +1215,12 @@ const handleSubmitExpense = async (e) => {
                               type,
                             }))
                           }
-                          className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                          className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors sm:text-sm ${
                             form.type === type
                               ? type === "Cash In"
                                 ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                                : type === "Reinvestment"
+                                ? "border-amber-600 bg-amber-50 text-amber-700"
                                 : "border-rose-600 bg-rose-50 text-rose-700"
                               : "border-slate-200 text-slate-500 hover:bg-slate-50"
                           }`}
@@ -1249,7 +1305,9 @@ const handleSubmitExpense = async (e) => {
       ? "Update Expense"
       : form.type === "Cash In"
         ? "Save Cash In"
-        : "Save Cash Out"}
+        : form.type === "Reinvestment"
+          ? "Save Reinvestment"
+          : "Save Cash Out"}
 </button>
                 </div>
               </form>

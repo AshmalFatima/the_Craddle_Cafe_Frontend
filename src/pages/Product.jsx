@@ -107,6 +107,26 @@ export default function Product() {
     maxPrice,
   ]);
 
+  // Total cost / selling / profit across all products (based on current
+  // unit stock). Swap `products` for `filtered` below if you'd rather have
+  // these reflect only the currently filtered/visible rows.
+  const totals = useMemo(() => {
+    return products.reduce(
+      (acc, p) => {
+        const stock = Number(p.unitStock) || 0;
+        const cost = Number(p.unitPrice) || 0;
+        const sell = Number(p.sellingPrice) || 0;
+
+        acc.totalCost += cost * stock;
+        acc.totalSelling += sell * stock;
+        acc.totalProfit += sell * stock - cost * stock;
+
+        return acc;
+      },
+      { totalCost: 0, totalSelling: 0, totalProfit: 0 }
+    );
+  }, [products]);
+
   function clearFilters() {
     setSearch("");
     setCategoryFilter("");
@@ -233,10 +253,11 @@ export default function Product() {
 
         {/* ================= SUMMARY ================= */}
         {/*
-          2 cards per row on mobile (2x2-style wrap), 3 in a row from sm up.
-          Card padding/text also scale down on mobile so 2-up doesn't feel cramped.
+          2 cards per row on mobile (2x2-style wrap), 3 in a row from sm up,
+          all 6 in a single row from lg up. Card padding/text also scale
+          down on mobile so 2-up doesn't feel cramped.
         */}
-        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <SummaryCard
             label="Total products"
             value={products.length}
@@ -253,7 +274,31 @@ export default function Product() {
             label="Categories"
             value={categories.length}
             icon="category"
-            className="col-span-2 sm:col-span-1"
+          />
+
+          <SummaryCard
+            label="Total cost"
+            value={formatCurrency(totals.totalCost)}
+            icon="cost"
+          />
+
+          <SummaryCard
+            label="Total selling"
+            value={formatCurrency(totals.totalSelling)}
+            icon="selling"
+          />
+
+          <SummaryCard
+            label="Total profit"
+            value={formatCurrency(totals.totalProfit)}
+            icon="profit"
+            valueClassName={
+              totals.totalProfit < 0
+                ? "text-rose-600"
+                : totals.totalProfit === 0
+                ? "text-slate-900"
+                : "text-emerald-600"
+            }
           />
         </div>
 
@@ -546,7 +591,7 @@ export default function Product() {
             The page does NOT become wider than the viewport.
           */}
           <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
 
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
@@ -578,6 +623,10 @@ export default function Product() {
                     Sell / item
                   </th>
 
+                  <th className="px-4 py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    Total profit
+                  </th>
+
                   <th className="px-5 py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     Actions
                   </th>
@@ -587,7 +636,7 @@ export default function Product() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-16 text-center">
+                    <td colSpan={9} className="px-5 py-16 text-center">
                       <div className="flex flex-col items-center">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
 
@@ -599,7 +648,7 @@ export default function Product() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-16 text-center">
+                    <td colSpan={9} className="px-5 py-16 text-center">
                       <div className="mx-auto flex max-w-sm flex-col items-center">
 
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
@@ -648,6 +697,12 @@ export default function Product() {
 
                     const outOfStock =
                       Number(p.unitStock) === 0;
+
+                    const totalProfit =
+                      (Number(p.sellingPrice) || 0) *
+                        (Number(p.unitStock) || 0) -
+                      (Number(p.unitPrice) || 0) *
+                        (Number(p.unitStock) || 0);
 
                     return (
                       <tr
@@ -729,6 +784,20 @@ export default function Product() {
                         <td className="px-4 py-4 text-right">
                           <span className="text-base font-bold text-slate-900">
                             {formatCurrency(p.sellingPrice)}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 text-right">
+                          <span
+                            className={`text-sm font-bold ${
+                              totalProfit < 0
+                                ? "text-rose-600"
+                                : totalProfit === 0
+                                ? "text-slate-500"
+                                : "text-emerald-600"
+                            }`}
+                          >
+                            {formatCurrency(totalProfit)}
                           </span>
                         </td>
 
@@ -818,7 +887,7 @@ export default function Product() {
    SUMMARY CARD
 ========================================================= */
 
-function SummaryCard({ label, value, icon, className = "" }) {
+function SummaryCard({ label, value, icon, className = "", valueClassName = "" }) {
   return (
     <div
       className={`rounded-2xl border border-slate-200 bg-white px-3.5 py-3.5 shadow-sm sm:px-5 sm:py-4 ${className}`}
@@ -829,7 +898,11 @@ function SummaryCard({ label, value, icon, className = "" }) {
             {label}
           </p>
 
-          <p className="mt-1 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+          <p
+            className={`mt-1 whitespace-nowrap text-lg font-bold tracking-tight sm:text-2xl ${
+              valueClassName || "text-slate-900"
+            }`}
+          >
             {value}
           </p>
         </div>
@@ -857,6 +930,28 @@ function SummaryCard({ label, value, icon, className = "" }) {
               <rect x="14" y="3" width="7" height="7" rx="1" />
               <rect x="3" y="14" width="7" height="7" rx="1" />
               <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          )}
+
+          {icon === "cost" && (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:h-[19px] sm:w-[19px]">
+              <path d="M20 12V8H6a2 2 0 0 1 0-4h12v4" />
+              <path d="M4 6v12a2 2 0 0 0 2 2h14v-4" />
+              <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+            </svg>
+          )}
+
+          {icon === "selling" && (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:h-[19px] sm:w-[19px]">
+              <path d="M12 2v20" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          )}
+
+          {icon === "profit" && (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="sm:h-[19px] sm:w-[19px]">
+              <path d="M3 17l6-6 4 4 8-8" />
+              <path d="M17 7h4v4" />
             </svg>
           )}
         </div>

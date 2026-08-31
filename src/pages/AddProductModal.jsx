@@ -1,11 +1,18 @@
-
 import React, { useMemo, useState } from "react";
 import Modal, { formatCurrency, formatNumber } from "./Modal";
 import ConfirmDialog from "./ConfirmDialog";
 import { getVariantSuggestions } from "./variantSuggestions";
 import { inventoryApi } from "../../src/api/inventoryApi";
+import { expensesApi } from "../../src/api/expensesApi";
 
 const STEPS = ["Details", "Stock & Cost", "Selling Price", "Review"];
+
+const FUNDING_SOURCES = [
+  { value: "New Amount", hint: "Fresh cash / new investment" },
+  { value: "Reinvestment", hint: "Recycled from existing profit" },
+];
+
+const PAYMENT_METHODS = ["Cash", "Online"];
 
 const emptyForm = {
   category: "",
@@ -15,6 +22,8 @@ const emptyForm = {
   itemsPerPet: "",
   petStock: "",
   sellingPrice: "",
+  fundingSource: "New Amount",
+  paymentMethod: "Cash",
 };
 
 export default function AddProductModal({
@@ -123,6 +132,14 @@ export default function AddProductModal({
       if (!(Number(form.petStock) > 0)) {
         return "Enter how many pets / cartons you're stocking.";
       }
+
+      if (!form.fundingSource) {
+        return "Select where this stock's cost is being funded from.";
+      }
+
+      if (!form.paymentMethod) {
+        return "Select a payment method.";
+      }
     }
 
     if (currentStep === 2) {
@@ -174,6 +191,29 @@ export default function AddProductModal({
       });
 
       onCreated?.(res.product);
+
+      // Log the opening-stock cost as an expense so cash flow / reinvest
+      // tracking stays accurate. This is supplementary — the product is
+      // already created, so a failure here shouldn't undo that.
+      try {
+        await expensesApi.create({
+          title: `${form.name.trim()} — ${form.variantName.trim()} (opening stock)`,
+          description: `Opening stock: ${formatNumber(
+            form.petStock
+          )} pets / ${formatNumber(unitStock)} units`,
+          amount: totalCostingPrice,
+          type:
+            form.fundingSource === "Reinvestment"
+              ? "Reinvestment"
+              : "Cash Out",
+          paymentMethod: form.paymentMethod,
+        });
+      } catch (expenseErr) {
+        console.error(
+          "Could not log opening stock expense:",
+          expenseErr
+        );
+      }
 
       setConfirmOpen(false);
       close();
@@ -521,6 +561,82 @@ export default function AddProductModal({
                 />
               </div>
             </div>
+
+            {/* Funding source — drives the auto-logged expense */}
+            <div className="rounded-2xl border-2 border-slate-200 bg-white p-5">
+              <p className="text-sm font-bold text-slate-800">
+                Funding source
+                <span className="ml-1 text-rose-500">*</span>
+              </p>
+
+              <p className="mb-3 mt-1 text-xs leading-4 text-slate-500">
+                Where is the money for this opening stock coming
+                from? This is logged automatically as an expense.
+              </p>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {FUNDING_SOURCES.map((source) => {
+                  const selected =
+                    form.fundingSource === source.value;
+
+                  return (
+                    <button
+                      type="button"
+                      key={source.value}
+                      onClick={() =>
+                        update("fundingSource", source.value)
+                      }
+                      className={`rounded-xl border-2 px-4 py-3 text-left transition ${
+                        selected
+                          ? "border-indigo-500 bg-indigo-50"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`block text-sm font-bold ${
+                          selected
+                            ? "text-indigo-900"
+                            : "text-slate-800"
+                        }`}
+                      >
+                        {source.value}
+                      </span>
+                      <span className="block text-xs text-slate-500">
+                        {source.hint}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-500">
+                Payment method
+              </p>
+
+              <div className="flex gap-2">
+                {PAYMENT_METHODS.map((method) => {
+                  const selected =
+                    form.paymentMethod === method;
+
+                  return (
+                    <button
+                      type="button"
+                      key={method}
+                      onClick={() =>
+                        update("paymentMethod", method)
+                      }
+                      className={`rounded-lg border px-4 py-2 text-xs font-semibold transition ${
+                        selected
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                      }`}
+                    >
+                      {method}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
 
@@ -740,6 +856,16 @@ export default function AddProductModal({
               />
 
               <SummaryRow
+                label="Funding source"
+                value={form.fundingSource}
+              />
+
+              <SummaryRow
+                label="Payment method"
+                value={form.paymentMethod}
+              />
+
+              <SummaryRow
                 label="Total selling value"
                 value={formatCurrency(
                   totalSellingPrice
@@ -769,8 +895,15 @@ export default function AddProductModal({
                 <span className="font-bold">
                   {formatNumber(unitStock)} units
                 </span>{" "}
-                in stock and record the opening stock-in
-                entry.
+                in stock, record the opening stock-in entry, and
+                log a{" "}
+                <span className="font-bold">
+                  {formatCurrency(totalCostingPrice)}
+                </span>{" "}
+                {form.fundingSource === "Reinvestment"
+                  ? "reinvestment"
+                  : "cash out"}{" "}
+                expense.
               </p>
             </div>
           </div>
@@ -829,9 +962,17 @@ export default function AddProductModal({
       <ConfirmDialog
         open={confirmOpen}
         title="Add this product?"
-        message={`This creates "${form.name} — ${form.variantName}" with ${formatNumber(
+        message={`This creates "${form.name} — ${
+          form.variantName
+        }" with ${formatNumber(
           unitStock
-        )} units in stock and logs the opening stock-in entry.`}
+        )} units in stock, logs the opening stock-in entry, and records a ${formatCurrency(
+          totalCostingPrice
+        )} ${
+          form.fundingSource === "Reinvestment"
+            ? "reinvestment"
+            : "cash out"
+        } expense (${form.paymentMethod}).`}
         confirmLabel="Add product"
         loading={saving}
         onConfirm={handleConfirm}
@@ -1033,4 +1174,3 @@ function SummaryRow({
     </div>
   );
 }
-
