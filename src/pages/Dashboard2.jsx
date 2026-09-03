@@ -48,10 +48,13 @@ const COLOR = {
   line: "#E7DFD1",
   gold: "#B8873A",
   goldDeep: "#8C6323",
+  goldSoft: "#F6ECD9",
   sage: "#4F6B4F",
   sageSoft: "#E7EEE3",
   rust: "#9C4A2E",
   rustSoft: "#F3E4DC",
+  plum: "#6B4A6B",
+  plumSoft: "#F0E6ED",
   muted: "#7A6A58",
 };
 
@@ -91,6 +94,25 @@ function presetRange(key) {
   return { startDate: "", endDate: "" };
 }
 
+// Expense-type presentation helpers — shared across the Overview,
+// Finance table, and mobile cards so "Cash In / Cash Out / Reinvestment /
+// Personal" are always styled the same way everywhere they appear.
+function expenseTone(type) {
+  if (type === "Cash Out") return "rust";
+  if (type === "Reinvestment") return "gold";
+  if (type === "Personal") return "plum";
+  return "sage"; // Cash In
+}
+function expenseColor(type) {
+  if (type === "Cash Out") return COLOR.rust;
+  if (type === "Reinvestment") return COLOR.goldDeep;
+  if (type === "Personal") return COLOR.plum;
+  return COLOR.sage; // Cash In
+}
+function expenseSign(type) {
+  return type === "Cash In" ? "+" : "-";
+}
+
 function generateDemoData() {
   const categories = ["Beans & Roasts", "Bakery", "Dairy & Milk Alt.", "Syrups", "Packaging"];
   const names = [
@@ -126,11 +148,19 @@ function generateDemoData() {
     { _id: "e3", title: "Electricity bill", type: "Cash Out", amount: 15800, expenseDate: new Date(Date.now() - 2 * 86400000) },
     { _id: "e4", title: "Roastery invoice", type: "Cash Out", amount: 42000, expenseDate: new Date(Date.now() - 3 * 86400000) },
     { _id: "e5", title: "Till sales — Wednesday", type: "Cash In", amount: 61300, expenseDate: new Date(Date.now() - 4 * 86400000) },
+    { _id: "e6", title: "New espresso machine parts", type: "Reinvestment", amount: 35000, expenseDate: new Date(Date.now() - 1 * 86400000) },
+    { _id: "e7", title: "Personal grocery run", type: "Personal", amount: 8000, expenseDate: new Date(Date.now() - 2 * 86400000) },
   ];
+  // Mirrors the fixed backend bucketing: each type gets its own total.
   const expenseTotals = expenses.reduce((a, e) => {
-    if (e.type === "Cash Out") a.totalOut += e.amount; else a.totalIn += e.amount;
+    if (e.type === "Cash Out") a.totalOut += e.amount;
+    else if (e.type === "Cash In") a.totalIn += e.amount;
+    else if (e.type === "Reinvestment") a.totalReinvest += e.amount;
+    else if (e.type === "Personal") a.totalPersonal += e.amount;
     return a;
-  }, { totalIn: 0, totalOut: 0 });
+  }, { totalIn: 0, totalOut: 0, totalReinvest: 0, totalPersonal: 0 });
+  expenseTotals.netCash =
+    expenseTotals.totalIn - expenseTotals.totalOut - expenseTotals.totalReinvest - expenseTotals.totalPersonal;
 
   const duesList = [
     { _id: "d1", customer: { name: "Bilal Events" }, totalAmount: 32000, paid: 20000, remaining: 12000, createdAt: new Date() },
@@ -171,6 +201,8 @@ function Badge({ tone = "muted", children }) {
   const tones = {
     sage: { bg: COLOR.sageSoft, fg: "#2E4530" },
     rust: { bg: COLOR.rustSoft, fg: "#6B2E1B" },
+    gold: { bg: COLOR.goldSoft, fg: COLOR.goldDeep },
+    plum: { bg: COLOR.plumSoft, fg: COLOR.plum },
     muted: { bg: "#F0EBE1", fg: COLOR.muted },
   };
   const t = tones[tone];
@@ -184,8 +216,13 @@ function Badge({ tone = "muted", children }) {
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub, tone }) {
-  const toneColor = tone === "up" ? COLOR.sage : tone === "down" ? COLOR.rust : COLOR.ink;
+function KpiCard({ icon: Icon, label, value, sub, formula, tone }) {
+  const toneColor =
+    tone === "up" ? COLOR.sage :
+    tone === "down" ? COLOR.rust :
+    tone === "gold" ? COLOR.goldDeep :
+    tone === "plum" ? COLOR.plum :
+    COLOR.ink;
   return (
     <div
       className="flex flex-col gap-2 px-4 py-3 rounded-xl"
@@ -202,6 +239,11 @@ function KpiCard({ icon: Icon, label, value, sub, tone }) {
         {value}
       </div>
       {sub && <div className="text-[11px]" style={{ color: COLOR.muted }}>{sub}</div>}
+      {formula && (
+        <div className="text-[10px] font-mono leading-tight" style={{ color: COLOR.muted }}>
+          {formula}
+        </div>
+      )}
     </div>
   );
 }
@@ -363,7 +405,37 @@ export default function Dashboard() {
     ];
   }, [data]);
 
-  const netCash = data ? data.expenseTotals.totalIn - data.expenseTotals.totalOut : 0;
+  // Reinvestment and Personal totals now come straight from the backend's
+  // expenseTotals (bucketed by exact type). Fall back to deriving them from
+  // the raw expenses list only for demo mode / older API responses that
+  // don't have these fields yet.
+  const reinvestTotal = useMemo(() => {
+    if (!data) return 0;
+    if (data.expenseTotals?.totalReinvest != null) return data.expenseTotals.totalReinvest;
+    return data.expenses
+      .filter((e) => e.type === "Reinvestment")
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [data]);
+
+  const personalTotal = useMemo(() => {
+    if (!data) return 0;
+    if (data.expenseTotals?.totalPersonal != null) return data.expenseTotals.totalPersonal;
+    return data.expenses
+      .filter((e) => e.type === "Personal")
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  }, [data]);
+
+  // Cash In, net of what's already been reinvested or spent personally —
+  // what's actually still available from the cash that came in.
+  const cashInNet = data ? data.expenseTotals.totalIn - reinvestTotal - personalTotal : 0;
+
+  // Net cash flow, also accounting for reinvestment and personal use —
+  // both are money leaving the till even though they aren't "Cash Out".
+  // Prefer the backend's own netCash if present.
+  const netCash = data
+    ? data.expenseTotals.netCash ??
+      data.expenseTotals.totalIn - data.expenseTotals.totalOut - reinvestTotal - personalTotal
+    : 0;
 
   const toggleSort = (field) => {
     if (sortKey === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -473,8 +545,16 @@ export default function Dashboard() {
               <KpiCard icon={Package} label="Stock value (cost)" value={pkr(data.totals.totalCost)} sub={`${data.totals.totalUnits} units on hand`} />
               <KpiCard icon={TrendingUp} label="Stock value (selling)" value={pkr(data.totals.totalSelling)} />
               <KpiCard icon={TrendingUp} label="Potential profit" value={pkr(data.totals.totalProfit)} tone="up" />
-              <KpiCard icon={ArrowUpRight} label="Cash in" value={pkr(data.expenseTotals.totalIn)} tone="up" />
+              <KpiCard
+                icon={ArrowUpRight}
+                label="Cash in"
+                value={pkr(cashInNet)}
+                tone="up"
+                formula={`${pkr(data.expenseTotals.totalIn)} − ${pkr(reinvestTotal)} − ${pkr(personalTotal)}`}
+              />
               <KpiCard icon={ArrowDownRight} label="Cash out" value={pkr(data.expenseTotals.totalOut)} tone="down" />
+              <KpiCard icon={RefreshCw} label="Reinvested" value={pkr(reinvestTotal)} tone="gold" sub="Recycled into stock" />
+              <KpiCard icon={TrendingDown} label="Personal use" value={pkr(personalTotal)} tone="plum" sub="Personal spending" />
               <KpiCard icon={Wallet} label="Net cash flow" value={pkr(netCash)} tone={netCash >= 0 ? "up" : "down"} />
               <KpiCard icon={Landmark} label="Remaining dues" value={pkr(data.globalRemaining)} sub="All-time, unfiltered" />
             </div>
@@ -557,8 +637,8 @@ export default function Dashboard() {
                             <div style={{ color: COLOR.ink }}>{e.title}</div>
                             <div className="text-xs" style={{ color: COLOR.muted }}>{new Date(e.expenseDate).toLocaleDateString()}</div>
                           </div>
-                          <span style={{ fontWeight: 600, color: e.type === "Cash Out" ? COLOR.rust : COLOR.sage }}>
-                            {e.type === "Cash Out" ? "-" : "+"}{pkr(e.amount)}
+                          <span style={{ fontWeight: 600, color: expenseColor(e.type) }}>
+                            {expenseSign(e.type)}{pkr(e.amount)}
                           </span>
                         </div>
                       ))}
@@ -705,8 +785,8 @@ export default function Dashboard() {
                         {data.expenses.map((e) => (
                           <tr key={e._id} style={{ borderBottom: `1px solid ${COLOR.line}` }}>
                             <td className="px-3 py-2.5">{e.title}</td>
-                            <td className="px-3 py-2.5"><Badge tone={e.type === "Cash Out" ? "rust" : "sage"}>{e.type}</Badge></td>
-                            <td className="px-3 py-2.5 text-right" style={{ fontWeight: 600, color: e.type === "Cash Out" ? COLOR.rust : COLOR.sage }}>{pkr(e.amount)}</td>
+                            <td className="px-3 py-2.5"><Badge tone={expenseTone(e.type)}>{e.type}</Badge></td>
+                            <td className="px-3 py-2.5 text-right" style={{ fontWeight: 600, color: expenseColor(e.type) }}>{pkr(e.amount)}</td>
                             <td className="px-3 py-2.5" style={{ color: COLOR.muted }}>{new Date(e.expenseDate).toLocaleDateString()}</td>
                           </tr>
                         ))}
@@ -720,7 +800,7 @@ export default function Dashboard() {
                           <div style={{ fontWeight: 500 }}>{e.title}</div>
                           <div className="text-xs" style={{ color: COLOR.muted }}>{new Date(e.expenseDate).toLocaleDateString()}</div>
                         </div>
-                        <span style={{ fontWeight: 600, color: e.type === "Cash Out" ? COLOR.rust : COLOR.sage }}>{pkr(e.amount)}</span>
+                        <span style={{ fontWeight: 600, color: expenseColor(e.type) }}>{pkr(e.amount)}</span>
                       </div>
                     ))}
                   </div>
