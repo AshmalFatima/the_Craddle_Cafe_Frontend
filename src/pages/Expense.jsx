@@ -9,6 +9,7 @@ const TYPES = {
   CASH_IN: "Cash In",
   CASH_OUT: "Cash Out",
   REINVEST: "Reinvestment",
+  PERSONAL: "Personal",
 };
 const PAYMENT_METHODS = ["Cash", "Online"];
 
@@ -31,6 +32,7 @@ const EMPTY_BREAKDOWN = {
   cashIn: { online: 0, cash: 0 },
   cashOut: { online: 0, cash: 0 },
   reinvest: { online: 0, cash: 0 },
+  personal: { online: 0, cash: 0 },
 };
 
 function authHeaders() {
@@ -171,8 +173,8 @@ export default function Expense() {
   // Online vs Cash split for each type — driven off the same date range
   // as `totals` (not the type filter), so all summary cards always show
   // their full Online/Cash split regardless of which card is selected.
-  // Also doubles as the source of the Reinvested total, since the
-  // /total endpoint doesn't necessarily know about that bucket.
+  // Also doubles as the source of the Reinvested and Personal totals,
+  // since the /total endpoint doesn't necessarily know about those buckets.
   const [paymentBreakdown, setPaymentBreakdown] = useState(EMPTY_BREAKDOWN);
 
   const [activeFilter, setActiveFilter] = useState(TYPES.ALL);
@@ -324,11 +326,12 @@ export default function Expense() {
   }, [filters.startDate, filters.endDate]);
 
   // ------------------------------------------------------------
-  // Load Online / Cash split (per type), plus the Reinvested total
+  // Load Online / Cash split (per type), plus the Reinvested and
+  // Personal totals.
   //
   // Uses the same date range as `totals` but ignores the active
-  // Cash In / Cash Out / Reinvestment card filter and the other
-  // text/amount filters, so the split shown on each card always
+  // Cash In / Cash Out / Reinvestment / Personal card filter and the
+  // other text/amount filters, so the split shown on each card always
   // reflects ALL of that type's entries in the date range — not
   // just what's currently showing in the table below.
   // ------------------------------------------------------------
@@ -366,6 +369,7 @@ export default function Expense() {
         cashIn: { online: 0, cash: 0 },
         cashOut: { online: 0, cash: 0 },
         reinvest: { online: 0, cash: 0 },
+        personal: { online: 0, cash: 0 },
       };
 
       list.forEach((exp) => {
@@ -374,6 +378,8 @@ export default function Expense() {
             ? "cashIn"
             : exp.type === "Reinvestment"
             ? "reinvest"
+            : exp.type === "Personal"
+            ? "personal"
             : "cashOut";
 
         // Schema only allows "Cash" or "Online" — anything else
@@ -550,12 +556,24 @@ const handleSubmitExpense = async (e) => {
     (paymentBreakdown.reinvest.online || 0) +
     (paymentBreakdown.reinvest.cash || 0);
 
+  // Personal-use total, same source as reinvestTotal above.
+  const personalTotal =
+    (paymentBreakdown.personal?.online || 0) +
+    (paymentBreakdown.personal?.cash || 0);
+
   // Cash In minus Cash Out from the backend, then netted against
-  // reinvestment: money recycled into stock isn't new cash out, but it
-  // also isn't sitting in the till, so it comes off the Balance shown here.
+  // reinvestment and personal use: money recycled into stock or spent
+  // personally isn't new cash out from the backend's point of view
+  // (different `type`), but it also isn't sitting in the till, so both
+  // come off the Balance shown here.
   const rawBalance =
     totals.balance ?? (totals.cashIn || 0) - (totals.cashOut || 0);
-  const netBalance = rawBalance - reinvestTotal;
+  const netBalance = rawBalance - reinvestTotal - personalTotal;
+
+  // Cash In, net of what's already been reinvested or spent personally —
+  // i.e. what's actually still available from the cash that came in.
+  const cashInNet =
+    (totals.cashIn || 0) - reinvestTotal - personalTotal;
 
   const cardMeta = [
     {
@@ -572,8 +590,13 @@ const handleSubmitExpense = async (e) => {
     {
       key: TYPES.CASH_IN,
       label: "Cash In",
-      value: formatCurrency(totals.cashIn),
+      value: formatCurrency(cashInNet),
       sub: `${totals.cashInCount ?? 0} entries`,
+      formula: `${formatCurrency(
+        totals.cashIn || 0
+      )} − ${formatCurrency(reinvestTotal)} − ${formatCurrency(
+        personalTotal
+      )}`,
       breakdown: paymentBreakdown.cashIn,
       accent: "emerald",
       clickable: true,
@@ -597,15 +620,24 @@ const handleSubmitExpense = async (e) => {
       clickable: true,
     },
     {
+      key: TYPES.PERSONAL,
+      label: "Personal",
+      value: formatCurrency(personalTotal),
+      sub: "Personal use",
+      breakdown: paymentBreakdown.personal,
+      accent: "purple",
+      clickable: true,
+    },
+    {
       key: "balance",
       label: "Balance",
       value: formatCurrency(netBalance),
-      sub: "Net position after reinvestment",
+      sub: "Net position after reinvestment & personal use",
       formula: `${formatCurrency(
         totals.cashIn || 0
       )} − ${formatCurrency(totals.cashOut || 0)} − ${formatCurrency(
         reinvestTotal
-      )}`,
+      )} − ${formatCurrency(personalTotal)}`,
       accent: "indigo",
       clickable: false,
     },
@@ -642,6 +674,14 @@ const handleSubmitExpense = async (e) => {
       text: "text-amber-700",
       dot: "bg-amber-600",
       bg: "bg-amber-50",
+    },
+
+    purple: {
+      ring: "ring-purple-600",
+      border: "border-purple-200",
+      text: "text-purple-700",
+      dot: "bg-purple-600",
+      bg: "bg-purple-50",
     },
 
     indigo: {
@@ -709,7 +749,7 @@ const handleSubmitExpense = async (e) => {
               </h1>
 
               <p className="mt-0.5 text-sm text-slate-500">
-                Track cash in, cash out, and reinvested stock spend — in one place.
+                Track cash in, cash out, reinvested stock spend, and personal use — in one place.
               </p>
             </div>
 
@@ -731,7 +771,7 @@ const handleSubmitExpense = async (e) => {
               2 columns on mobile (grid wraps), more from sm up
           ================================================== */}
 
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mb-6 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {cardMeta.map((card) => {
               const a = accentClasses[card.accent];
 
@@ -1063,23 +1103,30 @@ const handleSubmitExpense = async (e) => {
                     expenses.map((exp) => {
                       const isCashIn = exp.type === "Cash In";
                       const isReinvest = exp.type === "Reinvestment";
+                      const isPersonal = exp.type === "Personal";
 
                       const badgeClass = isCashIn
                         ? "bg-emerald-50 text-emerald-700"
                         : isReinvest
                         ? "bg-amber-50 text-amber-700"
+                        : isPersonal
+                        ? "bg-purple-50 text-purple-700"
                         : "bg-rose-50 text-rose-700";
 
                       const borderClass = isCashIn
                         ? "border-l-emerald-500"
                         : isReinvest
                         ? "border-l-amber-500"
+                        : isPersonal
+                        ? "border-l-purple-500"
                         : "border-l-rose-500";
 
                       const amountClass = isCashIn
                         ? "text-emerald-700"
                         : isReinvest
                         ? "text-amber-700"
+                        : isPersonal
+                        ? "text-purple-700"
                         : "text-rose-700";
 
                       return (
@@ -1203,8 +1250,8 @@ const handleSubmitExpense = async (e) => {
                     Type
                   </label>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    {["Cash In", "Cash Out", "Reinvestment"].map(
+                  <div className="grid grid-cols-2 gap-2">
+                    {["Cash In", "Cash Out", "Reinvestment", "Personal"].map(
                       (type) => (
                         <button
                           type="button"
@@ -1221,6 +1268,8 @@ const handleSubmitExpense = async (e) => {
                                 ? "border-emerald-600 bg-emerald-50 text-emerald-700"
                                 : type === "Reinvestment"
                                 ? "border-amber-600 bg-amber-50 text-amber-700"
+                                : type === "Personal"
+                                ? "border-purple-600 bg-purple-50 text-purple-700"
                                 : "border-rose-600 bg-rose-50 text-rose-700"
                               : "border-slate-200 text-slate-500 hover:bg-slate-50"
                           }`}
@@ -1307,7 +1356,9 @@ const handleSubmitExpense = async (e) => {
         ? "Save Cash In"
         : form.type === "Reinvestment"
           ? "Save Reinvestment"
-          : "Save Cash Out"}
+          : form.type === "Personal"
+            ? "Save Personal"
+            : "Save Cash Out"}
 </button>
                 </div>
               </form>
