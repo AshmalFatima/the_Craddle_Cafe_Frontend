@@ -208,6 +208,7 @@ export default function AddProductModal({
               : "Cash Out",
           paymentMethod: form.paymentMethod,
         });
+      
       } catch (expenseErr) {
         console.error(
           "Could not log opening stock expense:",

@@ -397,6 +397,25 @@ export default function Dashboard() {
     return arr;
   }, [data]);
 
+  // Profit by category — only products that are actually available (in stock)
+const categoryProfit = useMemo(() => {
+  if (!data) return [];
+  const map = {};
+  data.productsSummary.forEach((p) => {
+    if ((p.unitStock || 0) <= 0) return; // skip out-of-stock items
+    const key = p.category?.name || "Uncategorized";
+    if (!map[key]) map[key] = { name: key, profit: 0, cost: 0, selling: 0, units: 0, products: 0 };
+    map[key].profit += p.profitValue || 0;
+    map[key].cost += p.costValue || 0;
+    map[key].selling += p.sellingValue || 0;
+    map[key].units += p.unitStock || 0;
+    map[key].products += 1;
+  });
+  return Object.values(map)
+    .map((c) => ({ ...c, margin: c.selling > 0 ? (c.profit / c.selling) * 100 : 0 }))
+    .sort((a, b) => b.profit - a.profit);
+}, [data]);
+
   const movementChartData = useMemo(() => {
     if (!data) return [];
     return [
@@ -593,6 +612,69 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </SectionCard>
+                  <SectionCard
+  title="Profit by category (available stock)"
+  icon={TrendingUp}
+  action={
+    <span className="text-xs" style={{ color: COLOR.muted }}>
+      Total {pkr(categoryProfit.reduce((s, c) => s + c.profit, 0))}
+    </span>
+  }
+>
+  {categoryProfit.length === 0 ? (
+    <div className="text-sm py-4 text-center" style={{ color: COLOR.muted }}>
+      No available products to show.
+    </div>
+  ) : (
+    <>
+      <div style={{ width: "100%", height: Math.max(160, categoryProfit.length * 44) }}>
+        <ResponsiveContainer>
+          <BarChart data={categoryProfit} layout="vertical" margin={{ left: 8, right: 16 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={COLOR.line} horizontal={false} />
+            <XAxis
+              type="number"
+              tick={{ fontSize: 11, fill: COLOR.muted }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => `₨${(v / 1000).toFixed(0)}k`}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={110}
+              tick={{ fontSize: 12, fill: COLOR.ink }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: COLOR.goldSoft }} />
+            <Bar dataKey="profit" name="Profit" fill={COLOR.sage} radius={[0, 4, 4, 0]} maxBarSize={24} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="flex flex-col mt-3">
+        {categoryProfit.map((c) => (
+          <div
+            key={c.name}
+            className="flex items-center justify-between py-2 text-sm"
+            style={{ borderTop: `1px solid ${COLOR.line}` }}
+          >
+            <div>
+              <div style={{ color: COLOR.ink, fontWeight: 500 }}>{c.name}</div>
+              <div className="text-xs" style={{ color: COLOR.muted }}>
+                {c.products} products · {c.units} units · Cost {pkr(c.cost)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div style={{ color: COLOR.sage, fontWeight: 600 }}>{pkr(c.profit)}</div>
+              <Badge tone="sage">{c.margin.toFixed(1)}% margin</Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )}
+</SectionCard>
 
                   <SectionCard title="Top products by selling value" icon={TrendingUp}>
                     <div className="flex flex-col gap-2">
