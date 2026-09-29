@@ -13,18 +13,19 @@ import {
 /**
  * Returns Ledger — product return history + a "Return Product" flow.
  *
- * Backend contract assumed (adjust paths to match your app):
- *   GET  /api/products?search=<q>   -> [{ _id, name, variantName, sku,
+ * The return price is entered by the user (per unit or per pet). The product's
+ * own price is never pre-filled or suggested; it is only used as the cost basis
+ * for the "vs. original cost" hint and the history table.
+ *
+ * Backend contract:
+ *   GET  /api/products              -> [{ _id, name, variantName, sku,
  *                                          unitStock, petStock, unitPrice,
  *                                          petPrice, itemsPerPet }]
- *   GET  /api/returns/returns       -> { returns: [ProductReturn...] }
- *   POST /api/returns/return        -> { returnEntry, ... }
+ *   GET  /api/returns               -> { returns: [ProductReturn...] }
+ *   POST /api/returns               -> { returnEntry, ... }
  *        body: { productId, quantity, returnType, purchasePrice,
  *                 returnAmount, reason, note }
- *
- * Auth is assumed to ride on an httpOnly cookie (credentials: 'include').
- * If your app uses a bearer token instead, add an Authorization header
- * in `apiFetch` below.
+ *        returnAmount = TOTAL amount received (price entered × quantity)
  */
 
 const RETURNS_API = "https://the-craddle-cafe-backend.vercel.app/api/returns";
@@ -285,8 +286,7 @@ function ReturnDialog({ onClose, onSaved }) {
 
   const [returnType, setReturnType] = useState("unit");
   const [quantity, setQuantity] = useState("");
-  const [receivedFull, setReceivedFull] = useState(null); // true | false | null
-  const [actualAmount, setActualAmount] = useState("");
+  const [returnPrice, setReturnPrice] = useState(""); // price per unit/pet, entered by the user
   const [reason, setReason] = useState("");
   const [reasonOther, setReasonOther] = useState("");
   const [note, setNote] = useState("");
@@ -336,31 +336,38 @@ function ReturnDialog({ onClose, onSaved }) {
       .slice(0, 50);
   }, [searchTerm, selectedProduct, allProducts]);
 
-  const priceForType = selectedProduct
+  // Cost basis only (what these items originally cost). It is NOT used to
+  // pre-fill or suggest the return price.
+  const costPerType = selectedProduct
     ? returnType === "unit"
       ? selectedProduct.unitPrice
       : selectedProduct.petPrice
     : 0;
+
   const availableStock = selectedProduct
     ? returnType === "unit"
       ? selectedProduct.unitStock
       : selectedProduct.petStock
     : 0;
+
   const qtyNum = Number(quantity) || 0;
-  const expectedAmount = priceForType * qtyNum;
+  const priceNum = Number(returnPrice);
+  const totalReturnAmount = (Number(returnPrice) || 0) * qtyNum;
+  const totalCost = (Number(costPerType) || 0) * qtyNum;
+  const netAmount = totalReturnAmount - totalCost;
   const finalReason = reason === "Other" ? reasonOther.trim() : reason;
 
   const canSubmit =
-    selectedProduct &&
+    !!selectedProduct &&
     qtyNum > 0 &&
     qtyNum <= availableStock &&
-    receivedFull !== null &&
-    (receivedFull || (actualAmount !== "" && Number(actualAmount) >= 0)) &&
+    returnPrice !== "" &&
+    !isNaN(priceNum) &&
+    priceNum >= 0 &&
     finalReason.length > 0;
 
   const handlePickProduct = (p) => {
     setSelectedProduct(p);
-    
     setSearchTerm(`${p.name}${p.variantName ? ` — ${p.variantName}` : ""}`);
   };
 
@@ -368,8 +375,7 @@ function ReturnDialog({ onClose, onSaved }) {
     setSelectedProduct(null);
     setSearchTerm("");
     setQuantity("");
-    setReceivedFull(null);
-    setActualAmount("");
+    setReturnPrice("");
   };
 
   const handleSubmit = async (e) => {
@@ -384,8 +390,8 @@ function ReturnDialog({ onClose, onSaved }) {
           productId: selectedProduct._id,
           quantity: qtyNum,
           returnType,
-          purchasePrice: priceForType,
-          returnAmount: receivedFull ? expectedAmount : Number(actualAmount),
+          purchasePrice: costPerType,
+          returnAmount: totalReturnAmount, // price entered by the user × quantity
           reason: finalReason,
           note: note.trim(),
         }),
@@ -509,7 +515,10 @@ function ReturnDialog({ onClose, onSaved }) {
                       <button
                         type="button"
                         key={t}
-                        onClick={() => setReturnType(t)}
+                        onClick={() => {
+                          setReturnType(t);
+                          setReturnPrice(""); // a per-pet price differs from a per-unit price
+                        }}
                         className={`rounded px-2 py-1.5 text-xs font-semibold capitalize transition-colors ${
                           returnType === t ? "bg-[#2F6F63] text-white" : "text-[#5C6B73] hover:text-[#1C2B33]"
                         }`}
@@ -526,10 +535,7 @@ function ReturnDialog({ onClose, onSaved }) {
                     min="0"
                     step={returnType === "unit" ? "1" : "0.01"}
                     value={quantity}
-                    onChange={(e) => {
-                      setQuantity(e.target.value);
-                      setReceivedFull(null);
-                    }}
+                    onChange={(e) => setQuantity(e.target.value)}
                     placeholder="0"
                     className="w-full rounded-md border border-[#E4E0D6] bg-white px-3 py-2 text-sm text-[#1C2B33] outline-none focus:border-[#2F6F63]"
                   />
@@ -541,63 +547,43 @@ function ReturnDialog({ onClose, onSaved }) {
                 </p>
               )}
 
-              {/* expected amount + confirmation */}
+              {/* variable return price */}
               {qtyNum > 0 && qtyNum <= availableStock && (
                 <div className="mt-5 rounded-md border border-[#E4E0D6] bg-[#F7F5F0] p-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-[#5C6B73]">You should get back</span>
-                    <span className="text-lg font-semibold text-[#2F6F63]">{money(expectedAmount)}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-[#5C6B73]">
-                    {qtyNum} {returnType}(s) × {money(priceForType)} purchase price
-                  </p>
+                  <Field label={`Return price per ${returnType} (Rs)`}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={returnPrice}
+                      onChange={(e) => setReturnPrice(e.target.value)}
+                      placeholder="Enter the price you received"
+                      className="w-full rounded-md border border-[#E4E0D6] bg-white px-3 py-2 text-sm text-[#1C2B33] outline-none focus:border-[#2F6F63]"
+                    />
+                  </Field>
 
-                  <div className="mt-3.5 border-t border-[#E4E0D6] pt-3.5">
-                    <p className="mb-2 text-sm font-medium text-[#1C2B33]">
-                      Have you actually received this amount?
-                    </p>
-                    <div className="flex gap-2">
-                      <ChoiceButton
-                        active={receivedFull === true}
-                        tone="good"
-                        onClick={() => {
-                          setReceivedFull(true);
-                          setActualAmount("");
-                        }}
-                      >
-                        Yes, received in full
-                      </ChoiceButton>
-                      <ChoiceButton active={receivedFull === false} tone="bad" onClick={() => setReceivedFull(false)}>
-                        No, different amount
-                      </ChoiceButton>
-                    </div>
-
-                    {receivedFull === false && (
-                      <div className="mt-3">
-                        <Field label="Amount actually received">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={actualAmount}
-                            onChange={(e) => setActualAmount(e.target.value)}
-                            placeholder="0.00"
-                            className="w-full rounded-md border border-[#E4E0D6] bg-white px-3 py-2 text-sm text-[#1C2B33] outline-none focus:border-[#2F6F63]"
-                          />
-                        </Field>
-                        {actualAmount !== "" && (
-                          <p
-                            className={`mt-1.5 text-xs ${
-                              Number(actualAmount) - expectedAmount >= 0 ? "text-[#2F6F63]" : "text-[#B23A34]"
-                            }`}
-                          >
-                            {Number(actualAmount) - expectedAmount >= 0 ? "+" : ""}
-                            {money(Number(actualAmount) - expectedAmount)} vs. expected
-                          </p>
-                        )}
+                  {returnPrice !== "" && (
+                    <div className="mt-3.5 border-t border-[#E4E0D6] pt-3.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-[#5C6B73]">Total return amount</span>
+                        <span className="text-lg font-semibold text-[#2F6F63]">
+                          {money(totalReturnAmount)}
+                        </span>
                       </div>
-                    )}
-                  </div>
+                      <p className="mt-0.5 text-xs text-[#5C6B73]">
+                        {qtyNum} {returnType}(s) × {money(priceNum)}
+                      </p>
+
+                      <p
+                        className={`mt-2 text-xs ${
+                          netAmount >= 0 ? "text-[#2F6F63]" : "text-[#B23A34]"
+                        }`}
+                      >
+                        {netAmount >= 0 ? "+" : ""}
+                        {money(netAmount)} vs. original cost
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -679,23 +665,5 @@ function Field({ label, children }) {
       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-[#5C6B73]">{label}</span>
       {children}
     </label>
-  );
-}
-
-function ChoiceButton({ active, tone, onClick, children }) {
-  const activeClasses =
-    tone === "good"
-      ? "border-[#2F6F63] text-[#2F6F63] bg-[#2F6F63]/10"
-      : "border-[#B23A34] text-[#B23A34] bg-[#B23A34]/10";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex-1 rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${
-        active ? activeClasses : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-[#B7AF9E] hover:text-[#1C2B33]"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

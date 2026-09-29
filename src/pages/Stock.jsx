@@ -29,7 +29,21 @@ const EMPTY_FORM = {
   note: "",
   fundingSource: "New Amount",
   paymentMethod: "Cash",
+  // Stock Out flow
+  category: "",
+  outMode: "single", // "single" | "multiple"
+  productIds: [],
 };
+
+function getCategoryId(p) {
+  return typeof p.category === "object" ? p.category?._id : p.category;
+}
+
+function getCategoryName(p) {
+  return typeof p.category === "object" && p.category?.name
+    ? p.category.name
+    : "Uncategorized";
+}
 
 const FUNDING_SOURCES = [
   { value: "New Amount", hint: "Fresh cash / new investment" },
@@ -181,62 +195,73 @@ function StockModal({
   onClose,
   onSubmit,
 }) {
+  // Categories derived from the products list
+  const categories = useMemo(() => {
+    const map = new Map();
+    products.forEach((p) => {
+      const id = getCategoryId(p);
+      if (id && !map.has(id)) map.set(id, getCategoryName(p));
+    });
+    return [...map]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [products]);
+
   if (!open) return null;
 
   const isIn = mode === "in";
+  const isMultiple = !isIn && form.outMode === "multiple";
 
-  const selectedProduct = products.find(
-    (product) => product._id === form.product
+  const selectedProduct = products.find((p) => p._id === form.product);
+
+  const categoryProducts = products.filter(
+    (p) => getCategoryId(p) === form.category
+  );
+  // Only products that actually have stock can be stocked out
+  const stockedProducts = categoryProducts.filter(
+    (p) => Number(p.unitStock) > 0
   );
 
-  const handlePetChange = (e) => {
-    const value = e.target.value;
+  const allSelected =
+    stockedProducts.length > 0 &&
+    stockedProducts.every((p) => form.productIds.includes(p._id));
 
-    if (value === "") {
-      setForm((f) => ({
-        ...f,
-        petStock: "",
-      }));
-      return;
-    }
-
-    const cleaned = value.replace(/\D/g, "");
-
+  const toggleProduct = (id) =>
     setForm((f) => ({
       ...f,
-      petStock: cleaned,
+      productIds: f.productIds.includes(id)
+        ? f.productIds.filter((x) => x !== id)
+        : [...f.productIds, id],
     }));
+
+  const toggleAll = () =>
+    setForm((f) => ({
+      ...f,
+      productIds: allSelected ? [] : stockedProducts.map((p) => p._id),
+    }));
+
+  const handlePetChange = (e) => {
+    const cleaned = e.target.value.replace(/\D/g, "");
+    setForm((f) => ({ ...f, petStock: cleaned }));
   };
 
   const handleUnitChange = (e) => {
-    const value = e.target.value;
-
-    if (value === "") {
-      setForm((f) => ({
-        ...f,
-        unitStock: "",
-      }));
-      return;
-    }
-
-    const cleaned = value.replace(/\D/g, "");
-
-    setForm((f) => ({
-      ...f,
-      unitStock: cleaned,
-    }));
+    const cleaned = e.target.value.replace(/\D/g, "");
+    setForm((f) => ({ ...f, unitStock: cleaned }));
   };
 
-  // Cost preview for the funding-source note, mirrors StockManageModal:
-  // units = pets * itemsPerPet, cost = units * unitPrice.
+  // Cost preview (Stock In)
   const itemsPerPet = selectedProduct?.itemsPerPet || 1;
   const enteredPets = Number(form.petStock) || 0;
   const unitsForQty = enteredPets * itemsPerPet;
   const costForQty = unitsForQty * (selectedProduct?.unitPrice || 0);
 
+  const inputClass =
+    "w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10";
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#1C2B33]/40 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-[#E4E0D6] bg-white p-6 shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#E4E0D6] bg-white p-6 shadow-2xl">
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
           <div>
@@ -250,7 +275,7 @@ function StockModal({
             <p className="mt-0.5 text-xs text-[#5C6B73]">
               {isIn
                 ? "Add stock using whole pets / cartons."
-                : "Remove stock using whole units."}
+                : "Choose a category, then the product(s) to remove."}
             </p>
           </div>
 
@@ -265,205 +290,366 @@ function StockModal({
         </div>
 
         <form onSubmit={onSubmit} className="space-y-4">
-          {/* Product */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
-              Product
-            </label>
-
-            <select
-              value={form.product}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  product: e.target.value,
-                }))
-              }
-              className="w-full rounded-lg border border-[#E4E0D6] bg-white px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-            >
-              <option value="">Select product</option>
-
-              {products.map((product) => (
-                <option key={product._id} value={product._id}>
-                  {product.name}
-                  {product.variantName
-                    ? ` - ${product.variantName}`
-                    : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Current stock */}
-          {selectedProduct && (
-            <div className="rounded-lg border border-[#E4E0D6] bg-[#F7F5F0] px-3 py-2.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-[#5C6B73]">
-                  Current stock
-                </span>
-
-                <span className="font-medium text-[#1C2B33]">
-                  {selectedProduct.petStock ?? 0} pets /{" "}
-                  {selectedProduct.unitStock ?? 0} units
-                </span>
-              </div>
-
-              <div className="mt-1 flex justify-between text-xs">
-                <span className="text-[#5C6B73]">
-                  Items per pet
-                </span>
-
-                <span className="font-medium text-[#1C2B33]">
-                  {selectedProduct.itemsPerPet ?? 1}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Stock In = PETS ONLY */}
+          {/* ================= STOCK IN (unchanged flow) ================= */}
           {isIn && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
-                Pet Stock
-              </label>
+            <>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
+                  Product
+                </label>
 
-              <input
-                type="number"
-                min="1"
-                step="1"
-                inputMode="numeric"
-                value={form.petStock}
-                onChange={handlePetChange}
-                placeholder="Enter whole number of pets"
-                className="w-full rounded-lg border border-[#E4E0D6] px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-              />
+                <select
+                  value={form.product}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, product: e.target.value }))
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Select product</option>
+                  {products.map((product) => (
+                    <option key={product._id} value={product._id}>
+                      {product.name}
+                      {product.variantName ? ` - ${product.variantName}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <p className="mt-1 text-xs text-[#8A969C]">
-                Only whole pets are allowed for Stock In.
-              </p>
-            </div>
+              {selectedProduct && (
+                <div className="rounded-lg border border-[#E4E0D6] bg-[#F7F5F0] px-3 py-2.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[#5C6B73]">Current stock</span>
+                    <span className="font-medium text-[#1C2B33]">
+                      {selectedProduct.petStock ?? 0} pets /{" "}
+                      {selectedProduct.unitStock ?? 0} units
+                    </span>
+                  </div>
+                  <div className="mt-1 flex justify-between text-xs">
+                    <span className="text-[#5C6B73]">Items per pet</span>
+                    <span className="font-medium text-[#1C2B33]">
+                      {selectedProduct.itemsPerPet ?? 1}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
+                  Pet Stock
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={form.petStock}
+                  onChange={handlePetChange}
+                  placeholder="Enter whole number of pets"
+                  className={inputClass}
+                />
+                <p className="mt-1 text-xs text-[#8A969C]">
+                  Only whole pets are allowed for Stock In.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[#E4E0D6] bg-[#F7F5F0] p-4">
+                <p className="text-xs font-bold text-[#1C2B33]">
+                  Funding source
+                  <span className="ml-1 text-rose-500">*</span>
+                </p>
+
+                <p className="mb-2 mt-1 text-xs text-[#5C6B73]">
+                  Logs automatically as a{" "}
+                  <span className="font-semibold text-[#1C2B33]">
+                    {formatCurrency(costForQty)}
+                  </span>{" "}
+                  expense.
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  {FUNDING_SOURCES.map((source) => {
+                    const selected = form.fundingSource === source.value;
+                    return (
+                      <button
+                        type="button"
+                        key={source.value}
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            fundingSource: source.value,
+                          }))
+                        }
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                          selected
+                            ? "border-[#2F6F63] bg-[#2F6F63]/10 text-[#2F6F63]"
+                            : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-[#2F6F63] hover:bg-[#2F6F63]/10 hover:text-[#2F6F63]"
+                        }`}
+                        title={source.hint}
+                      >
+                        {source.value}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="mb-1.5 mt-3 text-xs font-bold text-[#1C2B33]">
+                  Payment method
+                </p>
+
+                <div className="flex gap-2">
+                  {PAYMENT_METHODS.map((method) => {
+                    const selected = form.paymentMethod === method;
+                    return (
+                      <button
+                        type="button"
+                        key={method}
+                        onClick={() =>
+                          setForm((f) => ({ ...f, paymentMethod: method }))
+                        }
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                          selected
+                            ? "border-[#2F6F63] bg-[#2F6F63]/10 text-[#2F6F63]"
+                            : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-[#2F6F63] hover:bg-[#2F6F63]/10 hover:text-[#2F6F63]"
+                        }`}
+                      >
+                        {method}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
           )}
 
-          {/* Stock Out = UNITS ONLY */}
+          {/* ================= STOCK OUT (new flow) ================= */}
           {!isIn && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
-                Unit Stock
-              </label>
+            <>
+              {/* Step 1: Category */}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
+                  1. Category
+                </label>
 
-              <input
-                type="number"
-                min="1"
-                step="1"
-                inputMode="numeric"
-                value={form.unitStock}
-                onChange={handleUnitChange}
-                placeholder="Enter whole number of units"
-                className="w-full rounded-lg border border-[#E4E0D6] px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-              />
-
-              <p className="mt-1 text-xs text-[#8A969C]">
-                Only whole units are allowed for Stock Out.
-              </p>
-            </div>
-          )}
-
-          {/* Funding source & payment method — only relevant when adding
-              stock (a cost), same pattern as StockManageModal. */}
-          {isIn && (
-            <div className="rounded-xl border border-[#E4E0D6] bg-[#F7F5F0] p-4">
-              <p className="text-xs font-bold text-[#1C2B33]">
-                Funding source
-                <span className="ml-1 text-rose-500">*</span>
-              </p>
-
-              <p className="mb-2 mt-1 text-xs text-[#5C6B73]">
-                Logs automatically as a{" "}
-                <span className="font-semibold text-[#1C2B33]">
-                  {formatCurrency(costForQty)}
-                </span>{" "}
-                expense.
-              </p>
-
-              <div className="flex flex-wrap gap-2">
-                {FUNDING_SOURCES.map((source) => {
-                  const selected =
-                    form.fundingSource === source.value;
-
-                  return (
-                    <button
-                      type="button"
-                      key={source.value}
-                      onClick={() =>
-                        setForm((f) => ({
-                          ...f,
-                          fundingSource: source.value,
-                        }))
-                      }
-                      className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
-                        selected
-                          ? "border-[#2F6F63] bg-[#2F6F63]/10 text-[#2F6F63]"
-                          : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-[#2F6F63] hover:bg-[#2F6F63]/10 hover:text-[#2F6F63]"
-                      }`}
-                      title={source.hint}
-                    >
-                      {source.value}
-                    </button>
-                  );
-                })}
+                <select
+                  value={form.category}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      category: e.target.value,
+                      product: "",
+                      unitStock: "",
+                      productIds: [],
+                    }))
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Select category</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <p className="mb-1.5 mt-3 text-xs font-bold text-[#1C2B33]">
-                Payment method
-              </p>
+              {/* Step 2: Single or multiple */}
+              {form.category && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
+                    2. Stock out
+                  </label>
 
-              <div className="flex gap-2">
-                {PAYMENT_METHODS.map((method) => {
-                  const selected = form.paymentMethod === method;
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: "single", label: "1 product" },
+                      { value: "multiple", label: "Multiple products" },
+                    ].map((opt) => {
+                      const selected = form.outMode === opt.value;
+                      return (
+                        <button
+                          type="button"
+                          key={opt.value}
+                          onClick={() =>
+                            setForm((f) => ({
+                              ...f,
+                              outMode: opt.value,
+                              product: "",
+                              unitStock: "",
+                              productIds: [],
+                            }))
+                          }
+                          className={`rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                            selected
+                              ? "border-rose-300 bg-rose-50 text-rose-700"
+                              : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-rose-300 hover:bg-rose-50"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                  return (
-                    <button
-                      type="button"
-                      key={method}
-                      onClick={() =>
+              {/* Step 3a: Single product + units */}
+              {form.category && !isMultiple && (
+                <>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
+                      3. Product
+                    </label>
+
+                    <select
+                      value={form.product}
+                      onChange={(e) =>
                         setForm((f) => ({
                           ...f,
-                          paymentMethod: method,
+                          product: e.target.value,
+                          unitStock: "",
                         }))
                       }
-                      className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
-                        selected
-                          ? "border-[#2F6F63] bg-[#2F6F63]/10 text-[#2F6F63]"
-                          : "border-[#E4E0D6] bg-white text-[#5C6B73] hover:border-[#2F6F63] hover:bg-[#2F6F63]/10 hover:text-[#2F6F63]"
-                      }`}
+                      className={inputClass}
                     >
-                      {method}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                      <option value="">Select product</option>
+                      {stockedProducts.map((product) => (
+                        <option key={product._id} value={product._id}>
+                          {product.name}
+                          {product.variantName
+                            ? ` - ${product.variantName}`
+                            : ""}{" "}
+                          ({product.unitStock} units)
+                        </option>
+                      ))}
+                    </select>
+
+                    {stockedProducts.length === 0 && (
+                      <p className="mt-1 text-xs text-[#8A969C]">
+                        No products with stock in this category.
+                      </p>
+                    )}
+                  </div>
+
+                  {selectedProduct && (
+                    <>
+                      <div className="rounded-lg border border-[#E4E0D6] bg-[#F7F5F0] px-3 py-2.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#5C6B73]">Current stock</span>
+                          <span className="font-medium text-[#1C2B33]">
+                            {selectedProduct.petStock ?? 0} pets /{" "}
+                            {selectedProduct.unitStock ?? 0} units
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
+                          4. Units
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max={selectedProduct.unitStock}
+                          step="1"
+                          inputMode="numeric"
+                          value={form.unitStock}
+                          onChange={handleUnitChange}
+                          placeholder="Enter whole number of units"
+                          className={inputClass}
+                        />
+                        <p className="mt-1 text-xs text-[#8A969C]">
+                          Available: {selectedProduct.unitStock} units.
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Step 3b: Multiple products — no units, stock goes to 0 */}
+              {form.category && isMultiple && (
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="block text-sm font-medium text-[#1C2B33]">
+                      3. Products
+                    </label>
+
+                    {stockedProducts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={toggleAll}
+                        className="text-xs font-semibold text-[#2F6F63] hover:underline"
+                      >
+                        {allSelected ? "Clear all" : "Select all"}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-56 divide-y divide-[#E4E0D6] overflow-y-auto rounded-lg border border-[#E4E0D6]">
+                    {stockedProducts.length === 0 ? (
+                      <p className="p-3 text-xs text-[#8A969C]">
+                        No products with stock in this category.
+                      </p>
+                    ) : (
+                      stockedProducts.map((product) => {
+                        const checked = form.productIds.includes(product._id);
+                        return (
+                          <label
+                            key={product._id}
+                            className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm transition hover:bg-[#F7F5F0] ${
+                              checked ? "bg-rose-50/60" : ""
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleProduct(product._id)}
+                              className="h-4 w-4 rounded border-[#D8D2C4] accent-rose-600"
+                            />
+                            <span className="min-w-0 flex-1 truncate text-[#1C2B33]">
+                              {product.name}
+                              {product.variantName
+                                ? ` - ${product.variantName}`
+                                : ""}
+                            </span>
+                            <span className="shrink-0 text-xs text-[#8A969C]">
+                              {product.unitStock} units
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {form.productIds.length > 0 && (
+                    <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                      {form.productIds.length} product
+                      {form.productIds.length > 1 ? "s" : ""} selected — all
+                      of their stock will be set to 0.
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {/* Note */}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
-              Note
-            </label>
-
-            <textarea
-              rows={3}
-              value={form.note}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  note: e.target.value,
-                }))
-              }
-              placeholder="Optional note"
-              className="w-full resize-none rounded-lg border border-[#E4E0D6] px-3 py-2.5 text-sm text-[#1C2B33] outline-none transition focus:border-[#2F6F63] focus:ring-2 focus:ring-[#2F6F63]/10"
-            />
-          </div>
+          {(isIn || form.category) && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-[#1C2B33]">
+                Note
+              </label>
+              <textarea
+                rows={3}
+                value={form.note}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, note: e.target.value }))
+                }
+                placeholder="Optional note"
+                className={`${inputClass} resize-none`}
+              />
+            </div>
+          )}
 
           {/* Error */}
           {error && (
@@ -496,6 +682,8 @@ function StockModal({
                 ? "Saving..."
                 : isIn
                 ? "Add Stock"
+                : isMultiple
+                ? "Clear Stock"
                 : "Remove Stock"}
             </button>
           </div>
@@ -750,15 +938,15 @@ export default function Stock() {
 
     setFormError("");
 
-    if (!form.product) {
-      setFormError("Please select a product.");
-      return;
-    }
-
     let url;
     let payload;
 
     if (modalMode === "in") {
+      if (!form.product) {
+        setFormError("Please select a product.");
+        return;
+      }
+
       const pets = Number(form.petStock);
 
       if (
@@ -794,26 +982,63 @@ export default function Stock() {
         paymentMethod: form.paymentMethod,
       };
     } else {
-      const units = Number(form.unitStock);
-
-      if (
-        !form.unitStock ||
-        !Number.isInteger(units) ||
-        units <= 0
-      ) {
-        setFormError(
-          "Stock Out must contain a whole number of units."
-        );
+      if (!form.category) {
+        setFormError("Please select a category.");
         return;
       }
 
-      url = `${API_BASE}/out`;
+      if (form.outMode === "multiple") {
+        // Multiple products: no units asked, all selected stock goes to 0
+        if (form.productIds.length === 0) {
+          setFormError("Select at least one product.");
+          return;
+        }
 
-      payload = {
-        product: form.product,
-        unitStock: units,
-        note: form.note.trim(),
-      };
+        url = `${API_BASE}/out/bulk`;
+
+        payload = {
+          products: form.productIds,
+          note: form.note.trim(),
+        };
+      } else {
+        // Single product: needs a product and a number of units
+        if (!form.product) {
+          setFormError("Please select a product.");
+          return;
+        }
+
+        const units = Number(form.unitStock);
+
+        if (
+          !form.unitStock ||
+          !Number.isInteger(units) ||
+          units <= 0
+        ) {
+          setFormError(
+            "Stock Out must contain a whole number of units."
+          );
+          return;
+        }
+
+        const selected = products.find(
+          (p) => p._id === form.product
+        );
+
+        if (selected && units > Number(selected.unitStock)) {
+          setFormError(
+            `Only ${selected.unitStock} units available.`
+          );
+          return;
+        }
+
+        url = `${API_BASE}/out`;
+
+        payload = {
+          product: form.product,
+          unitStock: units,
+          note: form.note.trim(),
+        };
+      }
     }
 
     setSubmitting(true);
