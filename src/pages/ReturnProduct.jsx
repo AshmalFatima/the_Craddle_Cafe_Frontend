@@ -41,6 +41,14 @@ const money = (n) => {
 const fmtDate = (d) =>
   new Date(d).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" });
 
+function getCategoryId(p) {
+  return typeof p.category === "object" ? p.category?._id : p.category;
+}
+
+function getCategoryName(p) {
+  return typeof p.category === "object" && p.category?.name ? p.category.name : "Uncategorized";
+}
+
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem("token");
   const res = await fetch(path, {
@@ -282,6 +290,7 @@ function Td({ children, align = "left", className = "" }) {
 
 function ReturnDialog({ onClose, onSaved }) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [category, setCategory] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   const [returnType, setReturnType] = useState("unit");
@@ -325,16 +334,30 @@ function ReturnDialog({ onClose, onSaved }) {
     };
   }, []);
 
+  // Categories are derived from the products list.
+  const categories = useMemo(() => {
+    const map = new Map();
+    allProducts.forEach((p) => {
+      const id = getCategoryId(p);
+      if (id && !map.has(id)) map.set(id, getCategoryName(p));
+    });
+    return [...map]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allProducts]);
+
+  // Products of the chosen category, narrowed further by the search box.
   const searchResults = useMemo(() => {
+    if (!category || selectedProduct) return [];
     const q = searchTerm.trim().toLowerCase();
-    if (!q || selectedProduct) return [];
     return allProducts
+      .filter((p) => getCategoryId(p) === category)
       .filter((p) => {
+        if (!q) return true;
         const haystack = `${p.name || ""} ${p.variantName || ""} ${p.sku || ""}`.toLowerCase();
         return haystack.includes(q);
-      })
-      .slice(0, 50);
-  }, [searchTerm, selectedProduct, allProducts]);
+      });
+  }, [category, searchTerm, selectedProduct, allProducts]);
 
   // Cost basis only (what these items originally cost). It is NOT used to
   // pre-fill or suggest the return price.
@@ -369,6 +392,14 @@ function ReturnDialog({ onClose, onSaved }) {
   const handlePickProduct = (p) => {
     setSelectedProduct(p);
     setSearchTerm(`${p.name}${p.variantName ? ` — ${p.variantName}` : ""}`);
+  };
+
+  const handleCategoryChange = (id) => {
+    setCategory(id);
+    setSelectedProduct(null);
+    setSearchTerm("");
+    setQuantity("");
+    setReturnPrice("");
   };
 
   const handleClearProduct = () => {
@@ -433,50 +464,69 @@ function ReturnDialog({ onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-8 py-6">
-          {/* product search */}
+          {/* step 1: category */}
+          <Field label="Category">
+            <select
+              value={category}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              disabled={loadingProducts}
+              className="w-full rounded-md border border-[#E4E0D6] bg-white px-3 py-2 text-sm text-[#1C2B33] outline-none focus:border-[#2F6F63]"
+            >
+              <option value="">
+                {loadingProducts ? "Loading categories…" : "Select a category…"}
+              </option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {productsError && (
+            <p className="mt-1.5 text-xs text-[#B23A34]">{productsError}</p>
+          )}
+
+          {/* step 2: products of that category, searchable */}
+          {category && (
+          <div className="mt-4">
           <Field label="Product">
             {!selectedProduct ? (
-              <div className="relative">
+              <div>
                 <div className="flex items-center gap-2 rounded-md border border-[#E4E0D6] bg-white px-3 py-2 focus-within:border-[#2F6F63]">
                   <Search className="h-4 w-4 shrink-0 text-[#5C6B73]" />
                   <input
                     autoFocus
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search by name, variant, or SKU…"
+                    placeholder="Search in this category…"
                     className="w-full bg-transparent text-sm text-[#1C2B33] outline-none placeholder:text-[#B7AF9E]"
                   />
                 </div>
 
-                {searchTerm.trim() && (
-                  <div className="absolute z-10 mt-1 max-h-[26rem] w-full overflow-y-auto rounded-md border border-[#E4E0D6] bg-white shadow-xl">
-                    {loadingProducts && (
-                      <div className="px-3 py-3 text-sm text-[#5C6B73]">Loading products…</div>
-                    )}
-                    {!loadingProducts && productsError && (
-                      <div className="px-3 py-3 text-sm text-[#B23A34]">{productsError}</div>
-                    )}
-                    {!loadingProducts && !productsError && searchResults.length === 0 && (
-                      <div className="px-3 py-3 text-sm text-[#5C6B73]">No products match "{searchTerm}"</div>
-                    )}
-                    {!loadingProducts &&
-                      !productsError &&
-                      searchResults.map((p) => (
-                        <button
-                          type="button"
-                          key={p._id}
-                          onClick={() => handlePickProduct(p)}
-                          className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#F7F5F0]"
-                        >
-                          <span>
-                            <span className="font-medium text-[#1C2B33]">{p.name}</span>
-                            {p.variantName && <span className="text-[#5C6B73]"> — {p.variantName}</span>}
-                          </span>
-                          <span className="shrink-0 text-xs text-[#5C6B73]">{p.unitStock} units</span>
-                        </button>
-                      ))}
-                  </div>
-                )}
+                <div className="mt-2 max-h-56 divide-y divide-[#E4E0D6] overflow-y-auto rounded-md border border-[#E4E0D6] bg-white">
+                  {searchResults.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-[#5C6B73]">
+                      {searchTerm.trim()
+                        ? `No products match "${searchTerm}" in this category`
+                        : "No products in this category"}
+                    </div>
+                  ) : (
+                    searchResults.map((p) => (
+                      <button
+                        type="button"
+                        key={p._id}
+                        onClick={() => handlePickProduct(p)}
+                        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#F7F5F0]"
+                      >
+                        <span>
+                          <span className="font-medium text-[#1C2B33]">{p.name}</span>
+                          {p.variantName && <span className="text-[#5C6B73]"> — {p.variantName}</span>}
+                        </span>
+                        <span className="shrink-0 text-xs text-[#5C6B73]">{p.unitStock} units</span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             ) : (
               <div className="flex items-start justify-between gap-3 rounded-md border border-[#E4E0D6] bg-[#F7F5F0] px-3 py-2.5">
@@ -504,6 +554,8 @@ function ReturnDialog({ onClose, onSaved }) {
               </div>
             )}
           </Field>
+          </div>
+          )}
 
           {selectedProduct && (
             <>
