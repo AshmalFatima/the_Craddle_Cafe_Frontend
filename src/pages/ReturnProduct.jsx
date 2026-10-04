@@ -22,6 +22,8 @@ import {
  *                                          unitStock, petStock, unitPrice,
  *                                          petPrice, itemsPerPet }]
  *   GET  /api/returns               -> { returns: [ProductReturn...] }
+ *   POST /api/returns/bulk          -> many products, same quantity + price each
+ *        body: { products: [ids], quantity, returnType, returnPrice, reason, note }
  *   POST /api/returns               -> { returnEntry, ... }
  *        body: { productId, quantity, returnType, purchasePrice,
  *                 returnAmount, reason, note }
@@ -289,9 +291,11 @@ function Td({ children, align = "left", className = "" }) {
 /* ----------------------------- return dialog ---------------------------- */
 
 function ReturnDialog({ onClose, onSaved }) {
-  const [searchTerm, setSearchTerm] = useState("");
   const [category, setCategory] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [mode, setMode] = useState("single"); // "single" | "multiple"
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState(null); // single mode
+  const [selectedIds, setSelectedIds] = useState([]); // multiple mode
 
   const [returnType, setReturnType] = useState("unit");
   const [quantity, setQuantity] = useState("");
@@ -304,7 +308,7 @@ function ReturnDialog({ onClose, onSaved }) {
   const [formError, setFormError] = useState(null);
 
   // All products are loaded once when the dialog opens, then filtered
-  // client-side as the person types — no per-keystroke request.
+  // client-side — no per-keystroke request.
   const [allProducts, setAllProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productsError, setProductsError] = useState(null);
@@ -334,6 +338,8 @@ function ReturnDialog({ onClose, onSaved }) {
     };
   }, []);
 
+  const isMultiple = mode === "multiple";
+
   // Categories are derived from the products list.
   const categories = useMemo(() => {
     const map = new Map();
@@ -346,67 +352,82 @@ function ReturnDialog({ onClose, onSaved }) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allProducts]);
 
-  // Products of the chosen category, narrowed further by the search box.
-  const searchResults = useMemo(() => {
-    if (!category || selectedProduct) return [];
+  // Products of the chosen category, narrowed by the search box.
+  // In multiple mode only products that still have stock are listed.
+  const visibleProducts = useMemo(() => {
+    if (!category) return [];
     const q = searchTerm.trim().toLowerCase();
     return allProducts
       .filter((p) => getCategoryId(p) === category)
+      .filter((p) => !isMultiple || Number(p.unitStock) > 0)
       .filter((p) => {
         if (!q) return true;
         const haystack = `${p.name || ""} ${p.variantName || ""} ${p.sku || ""}`.toLowerCase();
         return haystack.includes(q);
       });
-  }, [category, searchTerm, selectedProduct, allProducts]);
+  }, [category, searchTerm, allProducts, isMultiple]);
 
-  // Cost basis only (what these items originally cost). It is NOT used to
-  // pre-fill or suggest the return price.
-  const costPerType = selectedProduct
-    ? returnType === "unit"
-      ? selectedProduct.unitPrice
-      : selectedProduct.petPrice
-    : 0;
+  const selectedProducts = useMemo(() => {
+    if (isMultiple) return allProducts.filter((p) => selectedIds.includes(p._id));
+    return selectedProduct ? [selectedProduct] : [];
+  }, [isMultiple, allProducts, selectedIds, selectedProduct]);
 
-  const availableStock = selectedProduct
-    ? returnType === "unit"
-      ? selectedProduct.unitStock
-      : selectedProduct.petStock
-    : 0;
+  const stockFor = (p) => Number(returnType === "unit" ? p.unitStock : p.petStock) || 0;
+  const costFor = (p) => Number(returnType === "unit" ? p.unitPrice : p.petPrice) || 0;
 
   const qtyNum = Number(quantity) || 0;
   const priceNum = Number(returnPrice);
-  const totalReturnAmount = (Number(returnPrice) || 0) * qtyNum;
-  const totalCost = (Number(costPerType) || 0) * qtyNum;
+  const count = selectedProducts.length;
+
+  const shortProducts = selectedProducts.filter((p) => stockFor(p) < qtyNum);
+  const totalReturnAmount = (Number(returnPrice) || 0) * qtyNum * count;
+  const totalCost = selectedProducts.reduce((sum, p) => sum + costFor(p) * qtyNum, 0);
   const netAmount = totalReturnAmount - totalCost;
   const finalReason = reason === "Other" ? reasonOther.trim() : reason;
 
   const canSubmit =
-    !!selectedProduct &&
+    count > 0 &&
     qtyNum > 0 &&
-    qtyNum <= availableStock &&
+    shortProducts.length === 0 &&
     returnPrice !== "" &&
     !isNaN(priceNum) &&
     priceNum >= 0 &&
     finalReason.length > 0;
+
+  const allSelected =
+    visibleProducts.length > 0 && visibleProducts.every((p) => selectedIds.includes(p._id));
+
+  const resetSelection = () => {
+    setSelectedProduct(null);
+    setSelectedIds([]);
+    setSearchTerm("");
+    setQuantity("");
+    setReturnPrice("");
+  };
+
+  const handleCategoryChange = (id) => {
+    setCategory(id);
+    resetSelection();
+  };
+
+  const handleModeChange = (next) => {
+    setMode(next);
+    resetSelection();
+  };
 
   const handlePickProduct = (p) => {
     setSelectedProduct(p);
     setSearchTerm(`${p.name}${p.variantName ? ` — ${p.variantName}` : ""}`);
   };
 
-  const handleCategoryChange = (id) => {
-    setCategory(id);
-    setSelectedProduct(null);
-    setSearchTerm("");
-    setQuantity("");
-    setReturnPrice("");
-  };
+  const toggleProduct = (id) =>
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
-  const handleClearProduct = () => {
-    setSelectedProduct(null);
-    setSearchTerm("");
-    setQuantity("");
-    setReturnPrice("");
+  const toggleAll = () => {
+    const visibleIds = visibleProducts.map((p) => p._id);
+    setSelectedIds((ids) =>
+      allSelected ? ids.filter((id) => !visibleIds.includes(id)) : [...new Set([...ids, ...visibleIds])]
+    );
   };
 
   const handleSubmit = async (e) => {
@@ -415,18 +436,33 @@ function ReturnDialog({ onClose, onSaved }) {
     setSubmitting(true);
     setFormError(null);
     try {
-      await apiFetch(`${RETURNS_API}`, {
-        method: "POST",
-        body: JSON.stringify({
-          productId: selectedProduct._id,
-          quantity: qtyNum,
-          returnType,
-          purchasePrice: costPerType,
-          returnAmount: totalReturnAmount, // price entered by the user × quantity
-          reason: finalReason,
-          note: note.trim(),
-        }),
-      });
+      if (isMultiple) {
+        // Same quantity and same price applied to every selected product.
+        await apiFetch(`${RETURNS_API}/bulk`, {
+          method: "POST",
+          body: JSON.stringify({
+            products: selectedIds,
+            quantity: qtyNum,
+            returnType,
+            returnPrice: priceNum, // per unit/pet; the server multiplies by quantity
+            reason: finalReason,
+            note: note.trim(),
+          }),
+        });
+      } else {
+        await apiFetch(`${RETURNS_API}`, {
+          method: "POST",
+          body: JSON.stringify({
+            productId: selectedProduct._id,
+            quantity: qtyNum,
+            returnType,
+            purchasePrice: costFor(selectedProduct),
+            returnAmount: totalReturnAmount, // price entered by the user × quantity
+            reason: finalReason,
+            note: note.trim(),
+          }),
+        });
+      }
       onSaved();
     } catch (err) {
       setFormError(err.message);
@@ -445,14 +481,14 @@ function ReturnDialog({ onClose, onSaved }) {
         role="dialog"
         aria-modal="true"
         aria-label="Return product"
-        className="relative flex h-[85vh] max-h-[720px] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[#E4E0D6] bg-white shadow-2xl"
+        className="relative flex h-[85vh] max-h-[760px] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-[#E4E0D6] bg-white shadow-2xl"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[#E4E0D6] px-8 py-4">
           <h2
             className="text-base font-semibold text-[#1C2B33]"
             style={{ fontFamily: "Space Grotesk, sans-serif" }}
           >
-            Return a product
+            Return products
           </h2>
           <button
             onClick={onClose}
@@ -464,8 +500,8 @@ function ReturnDialog({ onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-8 py-6">
-          {/* step 1: category */}
-          <Field label="Category">
+          {/* 1. category */}
+          <Field label="1. Category">
             <select
               value={category}
               onChange={(e) => handleCategoryChange(e.target.value)}
@@ -482,84 +518,177 @@ function ReturnDialog({ onClose, onSaved }) {
               ))}
             </select>
           </Field>
-          {productsError && (
-            <p className="mt-1.5 text-xs text-[#B23A34]">{productsError}</p>
+          {productsError && <p className="mt-1.5 text-xs text-[#B23A34]">{productsError}</p>}
+
+          {/* 2. one or multiple */}
+          {category && (
+            <div className="mt-4">
+              <Field label="2. Return">
+                <div className="grid grid-cols-2 gap-1 rounded-md border border-[#E4E0D6] bg-[#F7F5F0] p-1">
+                  {[
+                    { value: "single", label: "One product" },
+                    { value: "multiple", label: "Multiple products" },
+                  ].map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={() => handleModeChange(opt.value)}
+                      className={`rounded px-2 py-2 text-xs font-semibold transition-colors ${
+                        mode === opt.value ? "bg-[#2F6F63] text-white" : "text-[#5C6B73] hover:text-[#1C2B33]"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </div>
           )}
 
-          {/* step 2: products of that category, searchable */}
-          {category && (
-          <div className="mt-4">
-          <Field label="Product">
-            {!selectedProduct ? (
-              <div>
-                <div className="flex items-center gap-2 rounded-md border border-[#E4E0D6] bg-white px-3 py-2 focus-within:border-[#2F6F63]">
-                  <Search className="h-4 w-4 shrink-0 text-[#5C6B73]" />
-                  <input
-                    autoFocus
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search in this category…"
-                    className="w-full bg-transparent text-sm text-[#1C2B33] outline-none placeholder:text-[#B7AF9E]"
-                  />
-                </div>
-
-                <div className="mt-2 max-h-56 divide-y divide-[#E4E0D6] overflow-y-auto rounded-md border border-[#E4E0D6] bg-white">
-                  {searchResults.length === 0 ? (
-                    <div className="px-3 py-3 text-sm text-[#5C6B73]">
-                      {searchTerm.trim()
-                        ? `No products match "${searchTerm}" in this category`
-                        : "No products in this category"}
+          {/* 3a. single product */}
+          {category && !isMultiple && (
+            <div className="mt-4">
+              <Field label="3. Product">
+                {!selectedProduct ? (
+                  <div>
+                    <div className="flex items-center gap-2 rounded-md border border-[#E4E0D6] bg-white px-3 py-2 focus-within:border-[#2F6F63]">
+                      <Search className="h-4 w-4 shrink-0 text-[#5C6B73]" />
+                      <input
+                        autoFocus
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search in this category…"
+                        className="w-full bg-transparent text-sm text-[#1C2B33] outline-none placeholder:text-[#B7AF9E]"
+                      />
                     </div>
-                  ) : (
-                    searchResults.map((p) => (
-                      <button
-                        type="button"
+
+                    <div className="mt-2 max-h-56 divide-y divide-[#E4E0D6] overflow-y-auto rounded-md border border-[#E4E0D6] bg-white">
+                      {visibleProducts.length === 0 ? (
+                        <div className="px-3 py-3 text-sm text-[#5C6B73]">
+                          {searchTerm.trim()
+                            ? `No products match "${searchTerm}" in this category`
+                            : "No products in this category"}
+                        </div>
+                      ) : (
+                        visibleProducts.map((p) => (
+                          <button
+                            type="button"
+                            key={p._id}
+                            onClick={() => handlePickProduct(p)}
+                            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#F7F5F0]"
+                          >
+                            <span>
+                              <span className="font-medium text-[#1C2B33]">{p.name}</span>
+                              {p.variantName && <span className="text-[#5C6B73]"> — {p.variantName}</span>}
+                            </span>
+                            <span className="shrink-0 text-xs text-[#5C6B73]">{p.unitStock} units</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-3 rounded-md border border-[#E4E0D6] bg-[#F7F5F0] px-3 py-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <Package className="mt-0.5 h-4 w-4 shrink-0 text-[#2F6F63]" />
+                      <div>
+                        <div className="text-sm font-medium text-[#1C2B33]">
+                          {selectedProduct.name}
+                          {selectedProduct.variantName && (
+                            <span className="text-[#5C6B73]"> — {selectedProduct.variantName}</span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-xs text-[#5C6B73]">
+                          In stock: {selectedProduct.unitStock} units · {selectedProduct.petStock} pets
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={resetSelection}
+                      className="shrink-0 text-xs font-medium text-[#5C6B73] underline underline-offset-2 hover:text-[#1C2B33]"
+                    >
+                      Change
+                    </button>
+                  </div>
+                )}
+              </Field>
+            </div>
+          )}
+
+          {/* 3b. multiple products */}
+          {category && isMultiple && (
+            <div className="mt-4">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[#5C6B73]">
+                  3. Products
+                </span>
+                {visibleProducts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-xs font-semibold text-[#2F6F63] hover:underline"
+                  >
+                    {allSelected ? "Clear all" : "Select all"}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 rounded-md border border-[#E4E0D6] bg-white px-3 py-2 focus-within:border-[#2F6F63]">
+                <Search className="h-4 w-4 shrink-0 text-[#5C6B73]" />
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Filter products in this category…"
+                  className="w-full bg-transparent text-sm text-[#1C2B33] outline-none placeholder:text-[#B7AF9E]"
+                />
+              </div>
+
+              <div className="mt-2 max-h-56 divide-y divide-[#E4E0D6] overflow-y-auto rounded-md border border-[#E4E0D6] bg-white">
+                {visibleProducts.length === 0 ? (
+                  <div className="px-3 py-3 text-sm text-[#5C6B73]">
+                    {searchTerm.trim()
+                      ? `No products match "${searchTerm}"`
+                      : "No products with stock in this category"}
+                  </div>
+                ) : (
+                  visibleProducts.map((p) => {
+                    const checked = selectedIds.includes(p._id);
+                    return (
+                      <label
                         key={p._id}
-                        onClick={() => handlePickProduct(p)}
-                        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[#F7F5F0]"
+                        className={`flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm transition-colors hover:bg-[#F7F5F0] ${
+                          checked ? "bg-[#2F6F63]/5" : ""
+                        }`}
                       >
-                        <span>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleProduct(p._id)}
+                          className="h-4 w-4 rounded border-[#D8D2C4] accent-[#2F6F63]"
+                        />
+                        <span className="min-w-0 flex-1 truncate">
                           <span className="font-medium text-[#1C2B33]">{p.name}</span>
                           {p.variantName && <span className="text-[#5C6B73]"> — {p.variantName}</span>}
                         </span>
                         <span className="shrink-0 text-xs text-[#5C6B73]">{p.unitStock} units</span>
-                      </button>
-                    ))
-                  )}
-                </div>
+                      </label>
+                    );
+                  })
+                )}
               </div>
-            ) : (
-              <div className="flex items-start justify-between gap-3 rounded-md border border-[#E4E0D6] bg-[#F7F5F0] px-3 py-2.5">
-                <div className="flex items-start gap-2.5">
-                  <Package className="mt-0.5 h-4 w-4 shrink-0 text-[#2F6F63]" />
-                  <div>
-                    <div className="text-sm font-medium text-[#1C2B33]">
-                      {selectedProduct.name}
-                      {selectedProduct.variantName && (
-                        <span className="text-[#5C6B73]"> — {selectedProduct.variantName}</span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 text-xs text-[#5C6B73]">
-                      In stock: {selectedProduct.unitStock} units · {selectedProduct.petStock} pets
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleClearProduct}
-                  className="shrink-0 text-xs font-medium text-[#5C6B73] underline underline-offset-2 hover:text-[#1C2B33]"
-                >
-                  Change
-                </button>
-              </div>
-            )}
-          </Field>
-          </div>
+
+              {count > 0 && (
+                <p className="mt-2 text-xs font-medium text-[#2F6F63]">
+                  {count} product{count > 1 ? "s" : ""} selected
+                </p>
+              )}
+            </div>
           )}
 
-          {selectedProduct && (
+          {/* 4. quantity + price + reason (shared by every selected product) */}
+          {count > 0 && (
             <>
-              {/* return type + quantity */}
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <Field label="Return as">
                   <div className="grid grid-cols-2 gap-1 rounded-md border border-[#E4E0D6] bg-[#F7F5F0] p-1">
@@ -581,7 +710,7 @@ function ReturnDialog({ onClose, onSaved }) {
                   </div>
                 </Field>
 
-                <Field label={`Quantity (${returnType}s)`}>
+                <Field label={isMultiple ? `Quantity of each (${returnType}s)` : `Quantity (${returnType}s)`}>
                   <input
                     type="number"
                     min="0"
@@ -593,14 +722,26 @@ function ReturnDialog({ onClose, onSaved }) {
                   />
                 </Field>
               </div>
-              {qtyNum > availableStock && (
-                <p className="mt-1.5 flex items-center gap-1.5 text-xs text-[#B23A34]">
-                  <AlertCircle className="h-3.5 w-3.5" /> Only {availableStock} {returnType}s available
-                </p>
+
+              {qtyNum > 0 && shortProducts.length > 0 && (
+                <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[#B23A34]">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  {isMultiple ? (
+                    <span>
+                      Not enough {returnType}s in stock for:{" "}
+                      {shortProducts
+                        .map((p) => `${p.name}${p.variantName ? ` — ${p.variantName}` : ""} (${stockFor(p)})`)
+                        .join(", ")}
+                    </span>
+                  ) : (
+                    <span>
+                      Only {stockFor(shortProducts[0])} {returnType}s available
+                    </span>
+                  )}
+                </div>
               )}
 
-              {/* variable return price */}
-              {qtyNum > 0 && qtyNum <= availableStock && (
+              {qtyNum > 0 && shortProducts.length === 0 && (
                 <div className="mt-5 rounded-md border border-[#E4E0D6] bg-[#F7F5F0] p-4">
                   <Field label={`Return price per ${returnType} (Rs)`}>
                     <input
@@ -609,7 +750,9 @@ function ReturnDialog({ onClose, onSaved }) {
                       step="0.01"
                       value={returnPrice}
                       onChange={(e) => setReturnPrice(e.target.value)}
-                      placeholder="Enter the price you received"
+                      placeholder={
+                        isMultiple ? "Same price for every selected product" : "Enter the price you received"
+                      }
                       className="w-full rounded-md border border-[#E4E0D6] bg-white px-3 py-2 text-sm text-[#1C2B33] outline-none focus:border-[#2F6F63]"
                     />
                   </Field>
@@ -623,13 +766,11 @@ function ReturnDialog({ onClose, onSaved }) {
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-[#5C6B73]">
+                        {isMultiple ? `${count} products × ` : ""}
                         {qtyNum} {returnType}(s) × {money(priceNum)}
                       </p>
-
                       <p
-                        className={`mt-2 text-xs ${
-                          netAmount >= 0 ? "text-[#2F6F63]" : "text-[#B23A34]"
-                        }`}
+                        className={`mt-2 text-xs ${netAmount >= 0 ? "text-[#2F6F63]" : "text-[#B23A34]"}`}
                       >
                         {netAmount >= 0 ? "+" : ""}
                         {money(netAmount)} vs. original cost
@@ -639,7 +780,6 @@ function ReturnDialog({ onClose, onSaved }) {
                 </div>
               )}
 
-              {/* reason + note */}
               <div className="mt-4">
                 <Field label="Reason for return">
                   <select
@@ -703,7 +843,7 @@ function ReturnDialog({ onClose, onSaved }) {
             className="inline-flex items-center gap-2 rounded-md bg-[#2F6F63] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#26594F] disabled:cursor-not-allowed disabled:bg-[#E4E0D6] disabled:text-[#B7AF9E]"
           >
             <Check className="h-4 w-4" />
-            {submitting ? "Saving…" : "Save return"}
+            {submitting ? "Saving…" : isMultiple && count > 1 ? `Save ${count} returns` : "Save return"}
           </button>
         </div>
       </div>
